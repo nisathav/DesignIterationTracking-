@@ -26,3 +26,15 @@ export const canSetFlagStatus = (u: SessionUser, f: Pick<FlagRow, 'assignedToId'
 /** Create a consideration from a flag, or name a flag as a new consideration's origin. */
 export const canSpawnFromFlag = (u: SessionUser, f: Pick<FlagRow, 'assignedToId' | 'raisedById'>) =>
   isManager(u) || f.assignedToId === u.id || f.raisedById === u.id;
+
+/** Closing an iteration is the consideration owner's decision (or a manager's). */
+export const canCloseIteration = (u: SessionUser, i: Pick<IterationRow, 'considerationOwnerId'>) =>
+  isManager(u) || i.considerationOwnerId === u.id;
+
+/** Review outcome (Approved / Approved with comments / Changes needed): the reviewer, i.e. the assignee. */
+export const canSetReviewOutcome = (u: SessionUser, f: Pick<FlagRow, 'assignedToId'>) =>
+  isManager(u) || f.assignedToId === u.id;
+
+/** Either side of a flag can bring in the managers. */
+export const canEscalateFlag = (u: SessionUser, f: Pick<FlagRow, 'assignedToId' | 'raisedById'>) =>
+  isManager(u) || f.assignedToId === u.id || f.raisedById === u.id;

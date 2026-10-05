@@ -143,9 +143,12 @@ describe('flag to consideration flow', () => {
 
     // Close the flag: date closed is set and both parties (minus the actor) are told.
     f = (await nilan.get(`/api/flags/${f.id}`)).body.flag;
-    const closed = await nilan.patch(`/api/flags/${f.id}`, { version: f.version, statusId: t.lookupId('flag_status', 'Closed') });
-    expect(closed.body).toMatchObject({ statusLabel: 'Closed', dateClosed: '2026-10-12', overdue: false });
-    expect(unread(t, 'Nisath').map((n) => n.kind)).toEqual(['flag_answered', 'flag_spawned', 'flag_closed']);
+    // A review cannot be closed without an outcome.
+    const noOutcome = await nilan.patch(`/api/flags/${f.id}`, { version: f.version, statusId: t.lookupId('flag_status', 'Closed') });
+    expect(noOutcome.status).toBe(400);
+    const closed = await nilan.patch(`/api/flags/${f.id}`, { version: f.version, statusId: t.lookupId('flag_status', 'Closed'), reviewOutcome: 'approved' });
+    expect(closed.body).toMatchObject({ statusLabel: 'Closed', dateClosed: '2026-10-12', overdue: false, reviewOutcome: 'approved', reviewOutcomeByName: 'Nilan' });
+    expect(unread(t, 'Nisath').map((n) => n.kind)).toEqual(['flag_answered', 'flag_spawned', 'flag_reviewed']);
     expect((await nilan.get('/api/my-items')).body.assigned).toEqual([]);
 
     // Audit trail: field-level rows for the flag.
@@ -153,9 +156,10 @@ describe('flag to consideration flow', () => {
     const fields = history.map((h) => [h.action, h.field, h.oldValue, h.newValue]);
     expect(fields).toEqual([
       ['create', null, null, null],
-      ['update', 'status', 'Open', 'In progress'],
       ['update', 'response', '', 'Clearance drops to 0.4 mm'],
+      ['update', 'status', 'Open', 'In progress'],
       ['link', 'resultingConsiderationId', null, 'CK-C01'],
+      ['update', 'reviewOutcome', null, 'Approved'],
       ['update', 'status', 'In progress', 'Closed'],
       ['update', 'dateClosed', null, '2026-10-12'],
     ]);
@@ -164,9 +168,10 @@ describe('flag to consideration flow', () => {
     const feed = (await oscar.get('/api/feed')).body;
     expect(feed.items.map((e: any) => `${e.event} ${e.entityId}`)).toEqual([
       'flag_status SH-C01-I01-F1',
+      'flag_review SH-C01-I01-F1',
       'consideration_created CK-C01',
-      'flag_answered SH-C01-I01-F1',
       'flag_status SH-C01-I01-F1',
+      'flag_answered SH-C01-I01-F1',
       'flag_raised SH-C01-I01-F1',
       'iteration_logged SH-C01-I01',
       'consideration_created SH-C01',

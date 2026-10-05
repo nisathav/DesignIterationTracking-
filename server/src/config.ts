@@ -21,6 +21,8 @@ export interface Config {
   appUrl: string;
   sessionDays: number;
   maxUploadMb: number;
+  /** Managers are notified when an open flag is this many days past its due date. */
+  overdueEscalationDays: number;
   smtp?: SmtpConfig;
 }
 
@@ -33,6 +35,7 @@ export const defaults: Config = {
   appUrl: 'http://localhost:8080',
   sessionDays: 14,
   maxUploadMb: 50,
+  overdueEscalationDays: 3,
 };
 
 /** Defaults, overridden by ./config.json if present, then by PORT / HOST env vars. */

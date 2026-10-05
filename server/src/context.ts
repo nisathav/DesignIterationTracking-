@@ -153,6 +153,11 @@ export class WriteCtx {
       .run(userId, entityType, String(entityId), this.at);
   }
 
+  /** Active managers. */
+  managers(): number[] {
+    return this.db.prepare("SELECT id FROM users WHERE role = 'manager' AND active = 1").pluck().all() as number[];
+  }
+
   /** Active followers of a consideration and of its domain. */
   followers(considerationId: string, domainId: number): number[] {
     const rows = this.db

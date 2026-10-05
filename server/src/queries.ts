@@ -70,6 +70,11 @@ export interface IterationRow {
   version: number;
   flagCount: number;
   openFlagCount: number;
+  closeOverrideReason: string | null;
+  /** Review flags raised from this iteration, and how many are closed and approved. */
+  reviewCount: number;
+  reviewApprovedCount: number;
+  reviewChangesNeededCount: number;
 }
 
 export interface FlagRow {
@@ -105,11 +110,32 @@ export interface FlagRow {
   response: string;
   resultingConsiderationId: string | null;
   dateClosed: string | null;
+  reviewOutcome: ReviewOutcome | null;
+  reviewOutcomeById: number | null;
+  reviewOutcomeByName: string | null;
+  reviewOutcomeAt: string | null;
+  escalatedAt: string | null;
+  escalatedByName: string | null;
+  escalationReason: string | null;
+  escalationResolvedAt: string | null;
+  escalationResolvedByName: string | null;
+  escalationResolution: string | null;
+  /** Escalated to the managers and not yet resolved. */
+  escalated: boolean;
+  iterationAuthorId: number;
+  considerationOwnerId: number;
   createdAt: string;
   updatedAt: string;
   version: number;
   overdue: boolean;
 }
+
+export type ReviewOutcome = 'approved' | 'approved_with_comments' | 'changes_needed';
+export const reviewOutcomeLabels: Record<ReviewOutcome, string> = {
+  approved: 'Approved',
+  approved_with_comments: 'Approved with comments',
+  changes_needed: 'Changes needed',
+};
 
 const CONS_SELECT = `
 SELECT c.id, c.seq, c.domain_id AS domainId, d.code AS domainCode, d.name AS domainName, d.colour AS domainColour,
@@ -148,7 +174,15 @@ SELECT i.id, i.seq, i.consideration_id AS considerationId, c.title AS considerat
   i.created_at AS createdAt, i.updated_at AS updatedAt, i.version,
   (SELECT count(*) FROM flags f WHERE f.iteration_id = i.id) AS flagCount,
   (SELECT count(*) FROM flags f JOIN lookup_values fs ON fs.id = f.status_id
-   WHERE f.iteration_id = i.id AND fs.behaviour <> 'closed') AS openFlagCount
+   WHERE f.iteration_id = i.id AND fs.behaviour <> 'closed') AS openFlagCount,
+  i.close_override_reason AS closeOverrideReason,
+  (SELECT count(*) FROM flags f JOIN lookup_values ft ON ft.id = f.type_id
+   WHERE f.iteration_id = i.id AND ft.behaviour = 'review') AS reviewCount,
+  (SELECT count(*) FROM flags f JOIN lookup_values ft ON ft.id = f.type_id JOIN lookup_values fs ON fs.id = f.status_id
+   WHERE f.iteration_id = i.id AND ft.behaviour = 'review' AND fs.behaviour = 'closed'
+     AND f.review_outcome IN ('approved','approved_with_comments')) AS reviewApprovedCount,
+  (SELECT count(*) FROM flags f JOIN lookup_values ft ON ft.id = f.type_id
+   WHERE f.iteration_id = i.id AND ft.behaviour = 'review' AND f.review_outcome = 'changes_needed') AS reviewChangesNeededCount
 FROM iterations i
 JOIN considerations c ON c.id = i.consideration_id
 JOIN domains d ON d.id = c.domain_id
@@ -169,8 +203,17 @@ SELECT f.id, f.seq, f.iteration_id AS iterationId, c.id AS considerationId, c.ti
   ad.colour AS affectedDomainColour, f.request, f.due_date AS dueDate,
   f.status_id AS statusId, st.label AS statusLabel, st.behaviour AS statusBehaviour, f.response,
   f.resulting_consideration_id AS resultingConsiderationId, f.date_closed AS dateClosed,
+  f.review_outcome AS reviewOutcome, f.review_outcome_by AS reviewOutcomeById, ro.name AS reviewOutcomeByName,
+  f.review_outcome_at AS reviewOutcomeAt, f.escalated_at AS escalatedAt, eb.name AS escalatedByName,
+  f.escalation_reason AS escalationReason, f.escalation_resolved_at AS escalationResolvedAt,
+  er.name AS escalationResolvedByName, f.escalation_resolution AS escalationResolution,
+  (f.escalated_at IS NOT NULL AND f.escalation_resolved_at IS NULL) AS escalated,
+  i.author_id AS iterationAuthorId, c.owner_id AS considerationOwnerId,
   f.created_at AS createdAt, f.updated_at AS updatedAt, f.version
 FROM flags f
+LEFT JOIN users ro ON ro.id = f.review_outcome_by
+LEFT JOIN users eb ON eb.id = f.escalated_by
+LEFT JOIN users er ON er.id = f.escalation_resolved_by
 JOIN iterations i ON i.id = f.iteration_id
 JOIN considerations c ON c.id = i.consideration_id
 JOIN domains sd ON sd.id = c.domain_id
@@ -184,6 +227,7 @@ JOIN lookup_values st ON st.id = f.status_id`;
 
 const withOverdue = (f: Omit<FlagRow, 'overdue'>): FlagRow => ({
   ...f,
+  escalated: !!f.escalated,
   overdue: !!f.dueDate && f.statusBehaviour !== 'closed' && f.dueDate < today(),
 });
 
@@ -273,6 +317,7 @@ export interface ListFilters {
   q?: string;
   following?: boolean;
   overdue?: boolean;
+  escalated?: boolean;
   sort?: string;
   dir?: string;
   limit?: number;
@@ -364,6 +409,7 @@ export function listFlags(db: DB, f: ListFilters, userId: number): FlagRow[] {
   if (f.from) w.add('f.date_raised >= ?', f.from);
   if (f.to) w.add('f.date_raised <= ?', f.to);
   if (f.overdue) w.add("f.due_date IS NOT NULL AND f.due_date < ? AND st.behaviour <> 'closed'", today());
+  if (f.escalated) w.add('f.escalated_at IS NOT NULL AND f.escalation_resolved_at IS NULL');
   w.text(['f.id', 'f.request', 'f.response', 'c.title', 'rb.name', 'at.name'], f.q);
   if (f.following) {
     w.add(`(${followingClause('c.domain_id', 'c.id')} OR f.affected_domain_id IN

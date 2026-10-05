@@ -201,4 +201,20 @@ export const migrations: string[] = [
   CREATE INDEX audit_entity ON audit_log(entity_type, entity_id);
   CREATE INDEX audit_event ON audit_log(event, id);
   `,
+  /* 2: review outcomes, manager escalation, close override */ `
+  ALTER TABLE flags ADD COLUMN review_outcome TEXT
+    CHECK (review_outcome IN ('approved','approved_with_comments','changes_needed'));
+  ALTER TABLE flags ADD COLUMN review_outcome_by INTEGER REFERENCES users(id);
+  ALTER TABLE flags ADD COLUMN review_outcome_at TEXT;
+  ALTER TABLE flags ADD COLUMN escalated_at TEXT;
+  ALTER TABLE flags ADD COLUMN escalated_by INTEGER REFERENCES users(id);
+  ALTER TABLE flags ADD COLUMN escalation_reason TEXT;
+  ALTER TABLE flags ADD COLUMN escalation_resolved_at TEXT;
+  ALTER TABLE flags ADD COLUMN escalation_resolved_by INTEGER REFERENCES users(id);
+  ALTER TABLE flags ADD COLUMN escalation_resolution TEXT;
+  -- Set when managers were told the flag is overdue, so they are told once.
+  ALTER TABLE flags ADD COLUMN overdue_escalated_at TEXT;
+  -- Why a manager closed an iteration without all reviews approved.
+  ALTER TABLE iterations ADD COLUMN close_override_reason TEXT;
+  `,
 ];

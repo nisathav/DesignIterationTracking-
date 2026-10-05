@@ -3,10 +3,10 @@ import { badRequest, conflict, forbidden, notFound, stale } from '../errors.js';
 import { formatId, nextSeq, scopes } from '../ids.js';
 import { checkLookup, defaultLookup, getLookup, lookupByBehaviour } from '../lookups.js';
 import {
-  canEditConsideration, canEditFlagRequest, canEditIteration, canRespondToFlag, canSetFlagStatus,
-  canSpawnFromFlag, isManager,
+  canCloseIteration, canEditConsideration, canEditFlagRequest, canEditIteration, canEscalateFlag, canRespondToFlag,
+  canSetFlagStatus, canSetReviewOutcome, canSpawnFromFlag, isManager,
 } from '../permissions.js';
-import { getConsideration, getFlag, getIteration } from '../queries.js';
+import { getConsideration, getFlag, getIteration, reviewOutcomeLabels, type ReviewOutcome } from '../queries.js';
 import type {
   ConsiderationCreate, ConsiderationUpdate, EntryCreate, FlagCreate, FlagUpdate, IterationCreate, IterationUpdate,
 } from '../schemas.js';
@@ -181,6 +181,9 @@ export function createIteration(ctx: WriteCtx, input: IterationCreate): string {
   activeUser(db, authorId, 'Author');
   const verdict = input.verdictId ? checkLookup(db, 'verdict', input.verdictId) : null;
   const status = input.statusId ? checkLookup(db, 'iteration_status', input.statusId) : defaultLookup(db, 'iteration_status');
+  if (status.behaviour === 'closed' && !canCloseIteration(user, { considerationOwnerId: c.ownerId })) {
+    throw forbidden(`Only the consideration owner (${c.ownerName}) or a manager can close an iteration`);
+  }
 
   // Parent: the previous iteration of this consideration, or for the first
   // iteration the flag the consideration came from (null for a root).
@@ -211,7 +214,17 @@ export function createIteration(ctx: WriteCtx, input: IterationCreate): string {
     kind: 'iteration_logged', entityType: 'iteration', entityId: iid,
     title: `${iid} logged by ${row.authorName}${verdict ? ` - ${verdict.label}` : ''}`, body: c.title,
   });
+  if (status.behaviour === 'closed') notifyFailedClose(ctx, row);
   return iid;
+}
+
+/** Managers hear about every iteration that is closed with a Fail verdict. */
+function notifyFailedClose(ctx: WriteCtx, it: { id: string; verdictBehaviour: string | null; considerationTitle: string }) {
+  if (it.verdictBehaviour !== 'fail') return;
+  ctx.notify(ctx.managers(), {
+    kind: 'iteration_failed', entityType: 'iteration', entityId: it.id,
+    title: `${it.id} was closed with verdict Fail (${ctx.user.name})`, body: it.considerationTitle,
+  });
 }
 
 const READ_ONLY = 'This iteration is closed and read-only. A manager can reopen it.';
@@ -226,7 +239,27 @@ export function updateIteration(ctx: WriteCtx, id: string, input: IterationUpdat
 
   if (changed(input, it, 'authorId')) activeUser(db, input.authorId!, 'Author');
   if (changed(input, it, 'verdictId') && input.verdictId !== null) checkLookup(db, 'verdict', input.verdictId!, it.verdictId);
-  if (changed(input, it, 'statusId')) checkLookup(db, 'iteration_status', input.statusId!, it.statusId);
+  const newStatus = changed(input, it, 'statusId') ? checkLookup(db, 'iteration_status', input.statusId!, it.statusId) : null;
+
+  // Closing is the consideration owner's decision, and needs every review approved.
+  // A manager may close without that, but must say why.
+  let overrideReason: string | null = null;
+  if (newStatus?.behaviour === 'closed') {
+    if (!canCloseIteration(user, it)) {
+      throw forbidden(`Only the consideration owner (${userName(db, it.considerationOwnerId)}) or a manager can close an iteration`);
+    }
+    const pending = reviewsNotApproved(db, id);
+    if (pending.length) {
+      const list = pending.map((p) => `${p.id} (${p.state})`).join(', ');
+      if (!isManager(user)) {
+        throw conflict(`All reviews must be approved before ${id} can be closed. Waiting on: ${list}. A manager can close it with a reason.`);
+      }
+      if (!input.closeOverrideReason) {
+        throw conflict(`Reviews not approved: ${list}. Give a reason to close it anyway.`, { needsOverrideReason: true });
+      }
+      overrideReason = input.closeOverrideReason;
+    }
+  }
 
   const next = {
     date: input.date ?? it.date,
@@ -243,10 +276,10 @@ export function updateIteration(ctx: WriteCtx, id: string, input: IterationUpdat
   const r = db.prepare(
     `UPDATE iterations SET date = ?, author_id = ?, design_input = ?, cad_design = ?, analytical_results = ?,
        simulation_results = ?, evidence_link = ?, verdict_id = ?, status_id = ?, next_action = ?,
-       updated_at = ?, version = version + 1
+       close_override_reason = coalesce(?, close_override_reason), updated_at = ?, version = version + 1
      WHERE id = ? AND version = ?`,
   ).run(next.date, next.authorId, next.designInput, next.cadDesign, next.analyticalResults, next.simulationResults,
-    next.evidenceLink, next.verdictId, next.statusId, next.nextAction, ctx.at, id, input.version);
+    next.evidenceLink, next.verdictId, next.statusId, next.nextAction, overrideReason, ctx.at, id, input.version);
   if (r.changes === 0) throw stale(getIteration(db, id));
 
   ctx.auditChanges(
@@ -262,6 +295,7 @@ export function updateIteration(ctx: WriteCtx, id: string, input: IterationUpdat
       verdict: [it.verdictLabel, lookupLabel(db, next.verdictId)],
       status: [it.statusLabel, lookupLabel(db, next.statusId)],
       nextAction: [it.nextAction, next.nextAction],
+      closeOverride: [null, overrideReason],
     },
     { verdict: 'iteration_verdict', status: 'iteration_status' },
   );
@@ -272,10 +306,25 @@ export function updateIteration(ctx: WriteCtx, id: string, input: IterationUpdat
     if (next.statusId !== it.statusId) parts.push(`now ${lookupLabel(db, next.statusId)}`);
     ctx.notify([...ctx.followers(it.considerationId, it.domainId), next.authorId], {
       kind: 'iteration_status', entityType: 'iteration', entityId: id,
-      title: `${id} ${parts.join(', ')} (${user.name})`, body: it.considerationTitle,
+      title: `${id} ${parts.join(', ')} (${user.name})${overrideReason ? ' without all reviews approved' : ''}`,
+      body: overrideReason ? `Reason: ${overrideReason}` : it.considerationTitle,
     });
   }
-  return getIteration(db, id)!;
+  const updated = getIteration(db, id)!;
+  if (newStatus?.behaviour === 'closed') notifyFailedClose(ctx, updated);
+  return updated;
+}
+
+/** Review flags of an iteration that are not closed with an approval. */
+export function reviewsNotApproved(db: DB, iterationId: string): Array<{ id: string; state: string }> {
+  const rows = db.prepare(
+    `SELECT f.id, f.review_outcome AS outcome, fs.behaviour AS status FROM flags f
+     JOIN lookup_values ft ON ft.id = f.type_id JOIN lookup_values fs ON fs.id = f.status_id
+     WHERE f.iteration_id = ? AND ft.behaviour = 'review' ORDER BY f.seq`,
+  ).all(iterationId) as Array<{ id: string; outcome: ReviewOutcome | null; status: string }>;
+  return rows
+    .filter((r) => !(r.status === 'closed' && (r.outcome === 'approved' || r.outcome === 'approved_with_comments')))
+    .map((r) => ({ id: r.id, state: r.outcome ? reviewOutcomeLabels[r.outcome].toLowerCase() : r.status === 'closed' ? 'closed without outcome' : 'open' }));
 }
 
 export function reopenIteration(ctx: WriteCtx, id: string, version: number) {
@@ -286,7 +335,7 @@ export function reopenIteration(ctx: WriteCtx, id: string, version: number) {
   if (it.statusBehaviour !== 'closed') throw conflict(`${id} is not closed`);
   if (version !== it.version) throw stale(it);
   const status = lookupByBehaviour(db, 'iteration_status', 'in_progress');
-  db.prepare('UPDATE iterations SET status_id = ?, updated_at = ?, version = version + 1 WHERE id = ?')
+  db.prepare('UPDATE iterations SET status_id = ?, close_override_reason = NULL, updated_at = ?, version = version + 1 WHERE id = ?')
     .run(status.id, ctx.at, id);
   ctx.audit({
     action: 'reopen', entityType: 'iteration', entityId: id, domainId: it.domainId, considerationId: it.considerationId,
@@ -307,6 +356,9 @@ export function createFlag(ctx: WriteCtx, input: FlagCreate): string {
   if (!it) throw badRequest(`Iteration ${input.iterationId} not found`);
   if (it.statusBehaviour === 'withdrawn') throw conflict(`${it.id} is withdrawn; flags cannot be raised from it`);
   const type = input.typeId ? checkLookup(db, 'flag_type', input.typeId) : defaultLookup(db, 'flag_type');
+  if (type.behaviour === 'review' && it.statusBehaviour === 'closed') {
+    throw conflict(`${it.id} is closed; a review can no longer be requested on it. Raise an FYI or Action flag, or log a new iteration.`);
+  }
   const assignee = activeUser(db, input.assignedToId, 'Assigned to');
   const affected = activeDomain(db, input.affectedDomainId);
   const status = defaultLookup(db, 'flag_status');
@@ -349,15 +401,18 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
     .some((k) => changed(input, f, k));
   const responseChanged = changed(input, f, 'response');
   const statusChanged = changed(input, f, 'statusId');
+  const outcomeChanged = input.reviewOutcome !== undefined && input.reviewOutcome !== f.reviewOutcome;
   if (requestChanged && !canEditFlagRequest(user, f)) throw forbidden('Only the person who raised the flag or a manager can change the request');
   if (responseChanged && !canRespondToFlag(user, f)) throw forbidden('Only the assignee or a manager can respond to this flag');
   if (statusChanged && !canSetFlagStatus(user, f)) throw forbidden('Only the assignee, the person who raised it or a manager can change its status');
+  if (outcomeChanged && !canSetReviewOutcome(user, f)) throw forbidden('Only the reviewer (the assignee) or a manager can give the review outcome');
   if (input.version !== f.version) throw stale(f);
 
-  if (changed(input, f, 'typeId')) checkLookup(db, 'flag_type', input.typeId!, f.typeId);
+  const type = changed(input, f, 'typeId') ? checkLookup(db, 'flag_type', input.typeId!, f.typeId) : null;
   if (changed(input, f, 'assignedToId')) activeUser(db, input.assignedToId!, 'Assigned to');
   if (changed(input, f, 'affectedDomainId')) activeDomain(db, input.affectedDomainId!);
   const newStatus = statusChanged ? checkLookup(db, 'flag_status', input.statusId!, f.statusId) : null;
+  const isReview = (type?.behaviour ?? f.typeBehaviour) === 'review';
 
   const next = {
     typeId: input.typeId ?? f.typeId,
@@ -368,18 +423,36 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
     statusId: input.statusId ?? f.statusId,
     response: input.response ?? f.response,
     dateClosed: f.dateClosed,
+    reviewOutcome: (input.reviewOutcome === undefined ? f.reviewOutcome : input.reviewOutcome) as ReviewOutcome | null,
   };
+  if (!isReview) {
+    if (input.reviewOutcome) throw badRequest('Only Review flags have a review outcome');
+    next.reviewOutcome = null;
+  }
   const closing = newStatus?.behaviour === 'closed' && f.statusBehaviour !== 'closed';
   if (newStatus) next.dateClosed = newStatus.behaviour === 'closed' ? (closing ? today() : f.dateClosed) : null;
+  const willBeClosed = (newStatus?.behaviour ?? f.statusBehaviour) === 'closed';
+  // A review is only finished when the reviewer has said how it went.
+  if (isReview && willBeClosed && !next.reviewOutcome) {
+    throw badRequest('Choose the review outcome (Approved, Approved with comments or Changes needed) before closing this review');
+  }
+  const outcomeSet = next.reviewOutcome !== f.reviewOutcome;
 
   const r = db.prepare(
     `UPDATE flags SET type_id = ?, assigned_to_id = ?, affected_domain_id = ?, request = ?, due_date = ?, status_id = ?,
-       response = ?, date_closed = ?, updated_at = ?, version = version + 1
+       response = ?, date_closed = ?, review_outcome = ?,
+       review_outcome_by = CASE WHEN ? THEN ? ELSE review_outcome_by END,
+       review_outcome_at = CASE WHEN ? THEN ? ELSE review_outcome_at END,
+       overdue_escalated_at = CASE WHEN ? THEN NULL ELSE overdue_escalated_at END,
+       updated_at = ?, version = version + 1
      WHERE id = ? AND version = ?`,
   ).run(next.typeId, next.assignedToId, next.affectedDomainId, next.request, next.dueDate, next.statusId,
-    next.response, next.dateClosed, ctx.at, id, input.version);
+    next.response, next.dateClosed, next.reviewOutcome,
+    outcomeSet ? 1 : 0, next.reviewOutcome ? user.id : null, outcomeSet ? 1 : 0, next.reviewOutcome ? ctx.at : null,
+    next.dueDate !== f.dueDate ? 1 : 0, ctx.at, id, input.version);
   if (r.changes === 0) throw stale(getFlag(db, id));
 
+  const outcomeLabel = (o: ReviewOutcome | null) => (o ? reviewOutcomeLabels[o] : null);
   ctx.auditChanges(
     { entityType: 'flag', entityId: id, domainId: f.sourceDomainId, considerationId: f.considerationId },
     {
@@ -388,11 +461,12 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
       affectedDomain: [f.affectedDomainCode, domainCode(db, next.affectedDomainId)],
       request: [f.request, next.request],
       dueDate: [f.dueDate, next.dueDate],
-      status: [f.statusLabel, lookupLabel(db, next.statusId)],
       response: [f.response, next.response],
+      reviewOutcome: [outcomeLabel(f.reviewOutcome), outcomeLabel(next.reviewOutcome)],
+      status: [f.statusLabel, lookupLabel(db, next.statusId)],
       dateClosed: [f.dateClosed, next.dateClosed],
     },
-    { status: 'flag_status', response: 'flag_answered', assignedTo: 'flag_assigned' },
+    { status: 'flag_status', response: 'flag_answered', assignedTo: 'flag_assigned', reviewOutcome: 'flag_review' },
   );
 
   // One notification per person describing everything that changed.
@@ -404,21 +478,90 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
       body: next.request,
     });
   }
+  const changesNeeded = outcomeSet && next.reviewOutcome === 'changes_needed';
   const parts: string[] = [];
+  if (outcomeSet && next.reviewOutcome) parts.push(`reviewed: ${outcomeLabel(next.reviewOutcome)}`);
   if (responseChanged) parts.push('answered');
   if (statusChanged) parts.push(closing ? 'closed' : `set to ${newStatus!.label}`);
   if (reassigned) parts.push(`reassigned to ${userName(db, next.assignedToId)}`);
   if (requestChanged && !reassigned) parts.push('request updated');
   if (parts.length) {
-    const kind = closing ? 'flag_closed' : responseChanged ? 'flag_answered' : statusChanged ? 'flag_status' : 'flag_updated';
+    const kind = changesNeeded ? 'review_changes_needed' : outcomeSet && next.reviewOutcome ? 'flag_reviewed'
+      : closing ? 'flag_closed' : responseChanged ? 'flag_answered' : statusChanged ? 'flag_status' : 'flag_updated';
     const people = [f.raisedById, f.assignedToId, next.assignedToId];
+    // The author and the consideration owner need to know how a review of their iteration went.
+    if (outcomeSet) people.push(f.iterationAuthorId, f.considerationOwnerId);
     if (statusChanged) people.push(...ctx.followers(f.considerationId, f.sourceDomainId));
     ctx.notify(people, {
       kind, entityType: 'flag', entityId: id,
       title: `${id} ${parts.join(', ')} by ${user.name}`,
-      body: responseChanged ? next.response : next.request,
+      body: responseChanged || outcomeSet ? next.response : next.request,
     });
   }
+
+  // Repeated "Changes needed" on the same consideration brings in the managers.
+  if (changesNeeded) {
+    const count = db.prepare(
+      `SELECT count(*) FROM flags fl JOIN iterations it ON it.id = fl.iteration_id
+       WHERE it.consideration_id = ? AND fl.review_outcome = 'changes_needed'`,
+    ).pluck().get(f.considerationId) as number;
+    if (count >= 2) {
+      ctx.notify(ctx.managers(), {
+        kind: 'repeated_changes_needed', entityType: 'flag', entityId: id,
+        title: `${f.considerationId}: review came back "Changes needed" ${count} times (latest ${id})`,
+        body: f.considerationTitle,
+      });
+    }
+  }
+  return getFlag(db, id)!;
+}
+
+/** Bring the managers in on a flag (disagreement, decision outside one's authority, blocked). */
+export function escalateFlag(ctx: WriteCtx, id: string, reason: string) {
+  const { db, user } = ctx;
+  const f = getFlag(db, id);
+  if (!f) throw notFound('Flag');
+  if (!canEscalateFlag(user, f)) throw forbidden('Only the assignee or the person who raised the flag can escalate it');
+  if (f.statusBehaviour === 'closed') throw conflict(`${id} is closed`);
+  if (f.escalated) throw conflict(`${id} is already escalated to the managers`);
+  db.prepare(
+    `UPDATE flags SET escalated_at = ?, escalated_by = ?, escalation_reason = ?, escalation_resolved_at = NULL,
+       escalation_resolved_by = NULL, escalation_resolution = NULL, updated_at = ?, version = version + 1 WHERE id = ?`,
+  ).run(ctx.at, user.id, reason, ctx.at, id);
+  ctx.audit({
+    action: 'update', entityType: 'flag', entityId: id, domainId: f.sourceDomainId, considerationId: f.considerationId,
+    field: 'escalation', oldValue: null, newValue: reason, event: 'flag_escalated',
+  });
+  ctx.notify(ctx.managers(), {
+    kind: 'flag_escalated', entityType: 'flag', entityId: id,
+    title: `${user.name} escalated ${id} to the managers`, body: reason,
+  });
+  ctx.notify([f.raisedById, f.assignedToId], {
+    kind: 'flag_escalated', entityType: 'flag', entityId: id,
+    title: `${id} was escalated to the managers by ${user.name}`, body: reason,
+  });
+  return getFlag(db, id)!;
+}
+
+export function resolveEscalation(ctx: WriteCtx, id: string, resolution: string) {
+  const { db, user } = ctx;
+  if (!isManager(user)) throw forbidden('Only a manager can resolve an escalation');
+  const f = getFlag(db, id);
+  if (!f) throw notFound('Flag');
+  if (!f.escalated) throw conflict(`${id} is not escalated`);
+  db.prepare(
+    `UPDATE flags SET escalation_resolved_at = ?, escalation_resolved_by = ?, escalation_resolution = ?,
+       updated_at = ?, version = version + 1 WHERE id = ?`,
+  ).run(ctx.at, user.id, resolution, ctx.at, id);
+  ctx.audit({
+    action: 'update', entityType: 'flag', entityId: id, domainId: f.sourceDomainId, considerationId: f.considerationId,
+    field: 'escalationResolution', oldValue: f.escalationReason, newValue: resolution, event: 'flag_escalation_resolved',
+  });
+  const escalatedBy = db.prepare('SELECT escalated_by FROM flags WHERE id = ?').pluck().get(id) as number | null;
+  ctx.notify([f.raisedById, f.assignedToId, ...(escalatedBy ? [escalatedBy] : [])], {
+    kind: 'flag_escalation_resolved', entityType: 'flag', entityId: id,
+    title: `${user.name} resolved the escalation on ${id}`, body: resolution,
+  });
   return getFlag(db, id)!;
 }
 

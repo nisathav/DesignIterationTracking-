@@ -196,7 +196,10 @@ describe('editing rules', () => {
     expect((await upul.patch(url, { version: await version(oscar, url, 'iteration'), designInput: 'author' })).status).toBe(200);
     expect((await nisath.patch(url, { version: await version(oscar, url, 'iteration'), designInput: 'owner' })).status).toBe(200);
 
-    const closed = await upul.patch(url, { version: await version(oscar, url, 'iteration'), statusId: t.lookupId('iteration_status', 'Closed'), verdictId: t.lookupId('verdict', 'Pass') });
+    // Only the consideration owner (Nisath) or a manager closes an iteration; the author cannot.
+    const byAuthor = await upul.patch(url, { version: await version(oscar, url, 'iteration'), statusId: t.lookupId('iteration_status', 'Closed') });
+    expect(byAuthor.status).toBe(403);
+    const closed = await nisath.patch(url, { version: await version(oscar, url, 'iteration'), statusId: t.lookupId('iteration_status', 'Closed'), verdictId: t.lookupId('verdict', 'Pass') });
     expect(closed.body.statusLabel).toBe('Closed');
     for (const who of [upul, nisath, oscar]) {
       const res = await who.patch(url, { version: await version(oscar, url, 'iteration'), designInput: 'late edit' });
@@ -227,6 +230,10 @@ describe('editing rules', () => {
     // Sending unchanged request fields alongside a response is fine for the assignee.
     const f = (await oscar.get(url)).body.flag;
     expect((await nilan.patch(url, { version: f.version, request: f.request, response: 'Done, see report' })).status).toBe(200);
+    // The raiser cannot give the review outcome, and a review cannot close without one.
+    expect((await nisath.patch(url, { version: await v(), reviewOutcome: 'approved' })).status).toBe(403);
+    expect((await nisath.patch(url, { version: await v(), statusId: t.lookupId('flag_status', 'Closed') })).status).toBe(400);
+    expect((await nilan.patch(url, { version: await v(), reviewOutcome: 'approved_with_comments' })).status).toBe(200);
     expect((await nisath.patch(url, { version: await v(), statusId: t.lookupId('flag_status', 'Closed') })).status).toBe(200);
     // Reassign by the raiser: new assignee is notified.
     const r = await nisath.patch(url, { version: await v(), assignedToId: t.userId('Kulunu') });

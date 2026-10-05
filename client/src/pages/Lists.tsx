@@ -4,11 +4,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { daysSince, fmtDate, useMeta } from '../hooks';
 import type { Consideration, Flag, Iteration, LookupCategory } from '../types';
-import { DomainBadge, IdLink, Loading, StatusBadge, VerdictBadge, domainStyle } from '../components/ui';
+import { DomainBadge, EscalatedBadge, IdLink, Loading, ReviewBadge, StatusBadge, VerdictBadge, domainStyle } from '../components/ui';
 
 // Filters live in the URL so a filtered list can be bookmarked or shared.
 
-type FilterKey = 'domain' | 'subsystem' | 'person' | 'verdict' | 'status' | 'type' | 'affectedDomain' | 'from' | 'to' | 'q' | 'following' | 'overdue';
+type FilterKey = 'domain' | 'subsystem' | 'person' | 'verdict' | 'status' | 'type' | 'affectedDomain' | 'from' | 'to' | 'q' | 'following' | 'overdue' | 'escalated';
 
 interface FilterSpec {
   keys: FilterKey[];
@@ -131,6 +131,11 @@ function FilterBar({ spec, count }: { spec: FilterSpec; count: number | undefine
       {has('overdue') && (
         <label className="check">
           <input type="checkbox" checked={v('overdue') === '1'} onChange={(e) => set({ overdue: e.target.checked ? '1' : null })} /> Overdue
+        </label>
+      )}
+      {has('escalated') && (
+        <label className="check">
+          <input type="checkbox" checked={v('escalated') === '1'} onChange={(e) => set({ escalated: e.target.checked ? '1' : null })} /> Escalated
         </label>
       )}
       <label className="check">
@@ -326,7 +331,7 @@ export function FlagListPage() {
         <h1>Flags</h1>
       </div>
       <FilterBar
-        spec={{ keys: ['domain', 'subsystem', 'affectedDomain', 'person', 'type', 'verdict', 'status', 'from', 'q', 'following', 'overdue'], personLabel: 'Person', statusCategory: 'flag_status', dateLabel: 'Raised' }}
+        spec={{ keys: ['domain', 'subsystem', 'affectedDomain', 'person', 'type', 'verdict', 'status', 'from', 'q', 'following', 'overdue', 'escalated'], personLabel: 'Person', statusCategory: 'flag_status', dateLabel: 'Raised' }}
         count={list.data?.length}
       />
       {list.isLoading ? <Loading /> : <FlagTable flags={list.data ?? []} sortable />}
@@ -375,8 +380,10 @@ export function FlagTable({ flags, sortable = false, compact = false }: { flags:
                 {f.response && <div className="response">↳ {truncate(f.response, 140)}</div>}
               </td>
               <td className={`nowrap ${f.overdue ? 'overdue-text' : ''}`}>{fmtDate(f.dueDate)}</td>
-              <td>
+              <td className="badges">
                 <StatusBadge label={f.statusLabel} behaviour={f.statusBehaviour} />
+                {f.typeBehaviour === 'review' && <ReviewBadge outcome={f.reviewOutcome} />}
+                {f.escalated && <EscalatedBadge />}
               </td>
               <td>
                 <IdLink id={f.resultingConsiderationId} />

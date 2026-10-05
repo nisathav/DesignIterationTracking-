@@ -4,11 +4,11 @@ LAN web app that replaces the Excel design iteration tracker: design considerati
 the iterations made against them, and the flags (reviews, FYIs, actions) they raise for
 other people and domains. Every iteration and every hand-over is traceable.
 
-> **Status: stage 2 of 4.** The data model, API, tests and the main screens are in place:
-> sign-in, new entry, the consideration / iteration / flag lists, the consideration page
-> and user management. Flag actions, My Items, notifications and the activity feed come
-> in stage 3. The dashboard, trace view, domain admin, Excel export/import and backups
-> come in stage 4.
+> **Status: stage 3 of 4.** Working: sign-in, team activity feed, My Items, domain board, new
+> entry, lists, consideration and flag pages with reviews and escalation, live notifications
+> (optional email), and admin for users, domains, sub-systems and dropdown lists. Still to
+> come in stage 4: dashboard, trace view, Excel export/import, nightly backups, weekly
+> digest, and Windows service instructions.
 
 ## Try it in the browser (GitHub Codespaces)
 
@@ -81,6 +81,30 @@ npm run dev          # API on :8080 with reload
 npm run dev:client   # UI on :5173 (proxies /api to :8080)
 ```
 
+## How reviews and escalation work
+
+**Reviews.**
+1. To ask for a review of an iteration, raise a flag of type *Review* for the reviewer.
+2. The reviewer opens the flag and gives an outcome: **Approved**, **Approved with comments**
+   or **Changes needed**. They add their comments, then close the review.
+3. "Changes needed" notifies the iteration author and the consideration owner.
+
+**Closing an iteration.**
+- Only the **consideration owner** (or a manager) can close an iteration.
+- They can close it only when **every Review flag on it is closed and approved**. FYI and
+  Action flags don't block closing.
+- A manager can close it anyway, but must give a reason. The reason is shown on the
+  iteration and kept in its history.
+- A closed iteration is read-only until a manager reopens it.
+
+**Escalation to the managers.** The managers are notified when:
+- the assignee or the raiser presses **Escalate to manager** on a flag (with a reason). A
+  manager records the decision with *Resolve escalation*;
+- an open flag is **3 days past its due date** (once per flag; set `overdueEscalationDays`
+  in config.json to change it);
+- a review comes back **Changes needed** for the second time on the same consideration;
+- an iteration is **closed with verdict Fail**.
+
 ## Configuration
 
 Optional `config.json` next to `package.json`:
@@ -92,6 +116,10 @@ Optional `config.json` next to `package.json`:
   "smtp": { "host": "mail.example.local", "port": 25, "from": "tracker@example.local" }
 }
 ```
+
+With `smtp` set, every in-app notification is also emailed to users who have an email
+address (set in **Users**), with a link to the record. `appUrl` is the address used in those
+links. Optional `smtp` fields: `secure`, `user`, `pass`.
 
 ## How it works
 

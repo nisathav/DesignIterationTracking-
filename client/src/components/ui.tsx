@@ -129,3 +129,14 @@ export function Section({ title, actions, children }: { title: ReactNode; action
     </section>
   );
 }
+
+export function ReviewBadge({ outcome }: { outcome: string | null }) {
+  if (!outcome) return null;
+  const label = outcome === 'approved' ? 'Approved' : outcome === 'approved_with_comments' ? 'Approved w/ comments' : 'Changes needed';
+  const cls = outcome === 'changes_needed' ? 'v-fail' : outcome === 'approved' ? 'v-pass' : 'v-cond';
+  return <span className={`badge verdict ${cls}`}>{label}</span>;
+}
+
+export function EscalatedBadge() {
+  return <span className="badge escalated-badge" title="Escalated to the managers">Escalated</span>;
+}

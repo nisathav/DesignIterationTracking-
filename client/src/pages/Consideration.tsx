@@ -234,6 +234,9 @@ function IterationCard({ it, flags, spawned }: { it: Iteration; flags: Flag[]; s
   const closed = it.statusBehaviour === 'closed';
   const withdrawn = it.statusBehaviour === 'withdrawn';
   const editable = !!me && canEditIteration(me, it) && !closed;
+  const canClose = !!me && (me.role === 'manager' || it.considerationOwnerId === me.id);
+  const reviewsDone = it.reviewApprovedCount === it.reviewCount;
+  const [closing, setClosing] = useState(false);
 
   const reopen = async () => {
     if (!confirm(`Reopen ${it.id}? It becomes editable again.`)) return;
@@ -256,7 +259,24 @@ function IterationCard({ it, flags, spawned }: { it: Iteration; flags: Flag[]; s
           <VerdictBadge label={it.verdictLabel} behaviour={it.verdictBehaviour} />
           <StatusBadge label={it.statusLabel} behaviour={it.statusBehaviour} />
           {closed && <span className="lock" title="Closed iterations are read-only">🔒 read-only</span>}
+          {it.reviewCount > 0 && (
+            <span className={`review-sum ${it.reviewApprovedCount === it.reviewCount ? 'done' : it.reviewChangesNeededCount ? 'changes' : ''}`}>
+              Reviews: {it.reviewApprovedCount} of {it.reviewCount} approved
+              {it.reviewChangesNeededCount > 0 && `, ${it.reviewChangesNeededCount} changes needed`}
+            </span>
+          )}
           <div className="spacer" />
+          {canClose && !closed && !withdrawn && !editing && (
+            <button
+              type="button"
+              className={`btn small ${reviewsDone ? 'primary' : ''}`}
+              onClick={() => setClosing(true)}
+              title={reviewsDone ? undefined : 'Not all reviews are approved yet'}
+              disabled={!reviewsDone && me?.role !== 'manager'}
+            >
+              Close iteration
+            </button>
+          )}
           {editable && !editing && (
             <button type="button" className="btn small" onClick={() => setEditing(true)}>
               Edit
@@ -269,6 +289,10 @@ function IterationCard({ it, flags, spawned }: { it: Iteration; flags: Flag[]; s
           )}
         </div>
         <ErrorBox error={error} />
+        {closing && <CloseIterationForm it={it} reviewsDone={reviewsDone} onDone={() => setClosing(false)} />}
+        {it.closeOverrideReason && (
+          <div className="override-note">Closed by a manager without all reviews approved: {it.closeOverrideReason}</div>
+        )}
         {editing ? (
           <IterationEdit it={it} onDone={() => setEditing(false)} />
         ) : (
@@ -327,11 +351,9 @@ function IterationEdit({ it, onDone }: { it: Iteration; onDone: () => void }) {
   });
   const [version, setVersion] = useState(it.version);
   const [error, setError] = useState<unknown>(null);
-  const closing = meta.lookups('iteration_status').find((l) => l.id === form.statusId)?.behaviour === 'closed';
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (closing && it.statusBehaviour !== 'closed' && !confirm('Closing makes this iteration read-only. Only a manager can reopen it. Continue?')) return;
     try {
       await api.patch(`/api/iterations/${it.id}`, { version, ...form });
       await qc.invalidateQueries({ queryKey: ['consideration', it.considerationId] });
@@ -375,9 +397,9 @@ function IterationEdit({ it, onDone }: { it: Iteration; onDone: () => void }) {
           ))}
         </select>
       </Field>
-      <Field label="Status">
+      <Field label="Status" hint="use Close iteration to close it">
         <select value={form.statusId} onChange={(e) => setForm({ ...form, statusId: Number(e.target.value) })}>
-          {meta.lookups('iteration_status', it.statusId).map((l) => (
+          {meta.lookups('iteration_status', it.statusId).filter((l) => l.behaviour !== 'closed').map((l) => (
             <option key={l.id} value={l.id}>
               {l.label}
             </option>
@@ -401,6 +423,46 @@ function IterationEdit({ it, onDone }: { it: Iteration; onDone: () => void }) {
       </div>
       <div className="form-actions wide">
         <button className="btn primary">Save</button>
+        <button type="button" className="btn ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Consideration owner (or manager) closes an iteration; a manager may override pending reviews with a reason. */
+function CloseIterationForm({ it, reviewsDone, onDone }: { it: Iteration; reviewsDone: boolean; onDone: () => void }) {
+  const meta = useMeta();
+  const qc = useQueryClient();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const closedStatus = meta.lookups('iteration_status').find((l) => l.behaviour === 'closed');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.patch(`/api/iterations/${it.id}`, { version: it.version, statusId: closedStatus?.id, ...(reviewsDone ? {} : { closeOverrideReason: reason }) });
+      await qc.invalidateQueries({ queryKey: ['consideration', it.considerationId] });
+      onDone();
+    } catch (err) {
+      setError(err);
+    }
+  };
+  return (
+    <form className="close-form" onSubmit={submit}>
+      <div>
+        <strong>Close {it.id}?</strong> It becomes read-only; only a manager can reopen it.
+        {it.verdictLabel ? ` Verdict: ${it.verdictLabel}.` : ' No verdict has been set.'}
+      </div>
+      {!reviewsDone && (
+        <Field label={`Not all reviews are approved (${it.reviewApprovedCount} of ${it.reviewCount}). Reason for closing anyway (manager override)`} wide>
+          <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} required />
+        </Field>
+      )}
+      <ErrorBox error={error} />
+      <div className="form-actions">
+        <button className="btn primary">{reviewsDone ? 'Close iteration' : 'Close with override'}</button>
         <button type="button" className="btn ghost" onClick={onDone}>
           Cancel
         </button>

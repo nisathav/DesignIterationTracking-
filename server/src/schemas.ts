@@ -73,7 +73,11 @@ export const iterationCreate = z
   .strict();
 export type IterationCreate = z.infer<typeof iterationCreate>;
 
-export const iterationUpdate = z.object({ version, ...iterationFields }).partial().required({ version: true }).strict();
+export const iterationUpdate = z
+  .object({ version, ...iterationFields, closeOverrideReason: required(1000) })
+  .partial()
+  .required({ version: true })
+  .strict();
 export type IterationUpdate = z.infer<typeof iterationUpdate>;
 
 // ---------- flags ----------
@@ -101,6 +105,7 @@ export const flagUpdate = z
     dueDate: isoDate.nullable(),
     statusId: id,
     response: text(5000),
+    reviewOutcome: z.enum(['approved', 'approved_with_comments', 'changes_needed']).nullable(),
   })
   .partial()
   .required({ version: true })

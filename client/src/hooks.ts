@@ -23,6 +23,8 @@ export function useMeta() {
       activeUsers: users.filter((u) => u.active),
       domain: (id: number | null | undefined): Domain | undefined => domains.find((d) => d.id === id),
       user: (id: number | null | undefined): User | undefined => users.find((u) => u.id === id),
+      /** Every sub-system of a domain, inactive ones too (admin). */
+      subsystems: (domainId: number): Subsystem[] => subsystems.filter((s) => s.domainId === domainId),
       subsystemsOf: (domainId: number | null | undefined, includeId?: number): Subsystem[] =>
         subsystems.filter((s) => s.domainId === domainId && (s.active || s.id === includeId)),
       lookups: (category: LookupCategory, includeId?: number | null): Lookup[] =>

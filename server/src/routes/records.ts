@@ -13,10 +13,10 @@ import {
   iterationCreate, iterationUpdate,
 } from '../schemas.js';
 import {
-  considerationFromFlag as spawnFromFlag, createConsideration, createEntry, createFlag, createIteration,
-  reopenIteration, updateConsideration, updateFlag, updateIteration,
+  considerationFromFlag as spawnFromFlag, createConsideration, createEntry, createFlag, createIteration, escalateFlag,
+  reopenIteration, resolveEscalation, updateConsideration, updateFlag, updateIteration,
 } from '../services/records.js';
-import { flag, idList, isoDate, parse, strList, version } from '../validation.js';
+import { flag, idList, isoDate, parse, required, strList, version } from '../validation.js';
 
 const listQuery = z.object({
   domain: idList,
@@ -36,6 +36,7 @@ const listQuery = z.object({
   q: z.string().trim().max(200).optional(),
   following: flag,
   overdue: flag,
+  escalated: flag,
   sort: z.string().max(30).optional(),
   dir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
@@ -135,6 +136,18 @@ export function registerRecordRoutes(app: FastifyInstance, svc: Services) {
     return write(svc, requireUser(req), (ctx) => updateFlag(ctx, id, body));
   });
 
+  app.post('/api/flags/:id/escalate', async (req) => {
+    const { id } = parse(idParam(ids.flagId), req.params);
+    const body = parse(z.object({ reason: required(2000) }).strict(), req.body);
+    return write(svc, requireUser(req), (ctx) => escalateFlag(ctx, id, body.reason));
+  });
+
+  app.post('/api/flags/:id/resolve-escalation', async (req) => {
+    const { id } = parse(idParam(ids.flagId), req.params);
+    const body = parse(z.object({ resolution: required(2000) }).strict(), req.body);
+    return write(svc, requireUser(req), (ctx) => resolveEscalation(ctx, id, body.resolution));
+  });
+
   /** Create a consideration from this flag; origin and the flag's result are linked automatically. */
   app.post('/api/flags/:id/consideration', async (req, reply) => {
     const { id } = parse(idParam(ids.flagId), req.params);
@@ -169,12 +182,22 @@ export function registerRecordRoutes(app: FastifyInstance, svc: Services) {
     return out;
   });
 
-  /** Open flags assigned to me (by due date) and flags I raised. */
+  /**
+   * Everything waiting on me: open flags assigned to me (by due date), flags I
+   * raised, iterations I own that are ready to close (all reviews approved),
+   * my iterations that came back "Changes needed", and for managers the
+   * escalated flags.
+   */
   app.get('/api/my-items', async (req) => {
     const user = requireUser(req);
+    const openIterations = listIterations(db, { owner: [user.id], statusBehaviour: ['in_progress', 'awaiting_review'], sort: 'id', limit: 500 }, user.id);
+    const mine = listIterations(db, { person: [user.id], statusBehaviour: ['in_progress', 'awaiting_review'], sort: 'id', limit: 500 }, user.id);
     return {
       assigned: listFlags(db, { assignee: [user.id], statusBehaviour: ['open', 'in_progress'], sort: 'due' }, user.id),
       raised: listFlags(db, { raisedBy: [user.id], sort: 'raised', dir: 'desc', limit: 200 }, user.id),
+      readyToClose: openIterations.filter((i) => i.reviewCount > 0 && i.reviewApprovedCount === i.reviewCount),
+      changesNeeded: mine.filter((i) => i.reviewChangesNeededCount > 0),
+      escalated: user.role === 'manager' ? listFlags(db, { escalated: true, sort: 'due' }, user.id) : [],
     };
   });
 }

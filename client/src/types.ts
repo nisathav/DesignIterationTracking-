@@ -121,6 +121,10 @@ export interface Iteration {
   version: number;
   flagCount: number;
   openFlagCount: number;
+  closeOverrideReason: string | null;
+  reviewCount: number;
+  reviewApprovedCount: number;
+  reviewChangesNeededCount: number;
 }
 
 export interface Flag {
@@ -155,10 +159,70 @@ export interface Flag {
   response: string;
   resultingConsiderationId: string | null;
   dateClosed: string | null;
+  reviewOutcome: ReviewOutcome | null;
+  reviewOutcomeById: number | null;
+  reviewOutcomeByName: string | null;
+  reviewOutcomeAt: string | null;
+  escalated: boolean;
+  escalatedAt: string | null;
+  escalatedByName: string | null;
+  escalationReason: string | null;
+  escalationResolvedAt: string | null;
+  escalationResolvedByName: string | null;
+  escalationResolution: string | null;
+  iterationAuthorId: number;
+  considerationOwnerId: number;
   createdAt: string;
   updatedAt: string;
   version: number;
   overdue: boolean;
+}
+
+export type ReviewOutcome = 'approved' | 'approved_with_comments' | 'changes_needed';
+export const reviewOutcomes: Array<{ value: ReviewOutcome; label: string }> = [
+  { value: 'approved', label: 'Approved' },
+  { value: 'approved_with_comments', label: 'Approved with comments' },
+  { value: 'changes_needed', label: 'Changes needed' },
+];
+export const reviewOutcomeLabel = (o: ReviewOutcome | null) => reviewOutcomes.find((x) => x.value === o)?.label ?? null;
+
+export interface MyItems {
+  assigned: Flag[];
+  raised: Flag[];
+  readyToClose: Iteration[];
+  changesNeeded: Iteration[];
+  escalated: Flag[];
+}
+
+export interface FeedItem {
+  id: number;
+  at: string;
+  event: string;
+  userId: number | null;
+  userName: string | null;
+  entityType: 'consideration' | 'iteration' | 'flag';
+  entityId: string;
+  domainId: number | null;
+  domainCode: string | null;
+  domainColour: string | null;
+  considerationId: string | null;
+  considerationTitle: string | null;
+  from?: string | null;
+  to?: string | null;
+  text?: string;
+  title?: string;
+  ownerName?: string;
+  subsystemName?: string;
+  originFlagId?: string | null;
+  verdictLabel?: string | null;
+  verdictBehaviour?: string | null;
+  statusLabel?: string;
+  authorName?: string;
+  typeLabel?: string;
+  assignedToName?: string;
+  affectedDomainCode?: string;
+  affectedDomainColour?: string;
+  dueDate?: string | null;
 }
 
 export interface ConsiderationDetail {

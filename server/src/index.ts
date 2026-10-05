@@ -3,6 +3,8 @@ import path from 'node:path';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { issueInitialPasswords, writePasswordSheet } from './services/users.js';
+import { startMailer } from './mailer.js';
+import { startScheduler } from './scheduler.js';
 
 const config = loadConfig();
 const { app, svc } = await buildApp({ config, logger: true });
@@ -18,6 +20,8 @@ if (issued.length) {
 }
 
 await app.listen({ host: config.host, port: config.port });
+startMailer(svc, (m) => app.log.info(m));
+const stopScheduler = startScheduler(svc, (m) => app.log.info(m));
 
 const addresses = Object.values(os.networkInterfaces())
   .flat()
@@ -27,6 +31,7 @@ app.log.info(`Design Iteration Tracker is running. Colleagues can connect at: ${
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
+    stopScheduler();
     app.close().then(() => process.exit(0));
   });
 }
