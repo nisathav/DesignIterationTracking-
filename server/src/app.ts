@@ -1,6 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import { ZodError } from 'zod';
 import { Bus, type Services } from './context.js';
 import type { Config } from './config.js';
@@ -44,6 +48,18 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
   registerRecordRoutes(app, svc);
   registerAdminRoutes(app, svc);
   registerSocialRoutes(app, svc);
+
+  // The built front end (dist/client), with every non-API path answered by
+  // index.html so browser routes like /considerations/SH-C01 work on reload.
+  const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
+  const hasClient = fs.existsSync(path.join(clientDir, 'index.html'));
+  if (hasClient) await app.register(fastifyStatic, { root: clientDir, wildcard: false });
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/') || !hasClient || req.method !== 'GET') {
+      return reply.code(404).send({ error: 'not_found', message: 'Not found' });
+    }
+    return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
+  });
 
   app.addHook('onClose', async () => {
     svc.bus.emit('shutdown');

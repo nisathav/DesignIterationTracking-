@@ -4,9 +4,11 @@ LAN web app that replaces the Excel design iteration tracker: design considerati
 the iterations made against them, and the flags (reviews, FYIs, actions) they raise for
 other people and domains. Every iteration and every hand-over is traceable.
 
-> **Status: stage 1 of 4.** The data model, the REST API and the tests are in place.
-> The browser UI comes in stage 2. Full install, service, backup and firewall
-> instructions come with stage 4.
+> **Status: stage 2 of 4.** The data model, API, tests and the main screens are in place:
+> sign-in, new entry, the consideration / iteration / flag lists, the consideration page
+> and user management. Flag actions, My Items, notifications and the activity feed come
+> in stage 3. The dashboard, trace view, domain admin, Excel export/import and backups
+> come in stage 4.
 
 ## Requirements
 
@@ -26,8 +28,32 @@ starts empty except for the set-up taken from the Excel tracker: domains SH, CK,
 with their owners, colours and sub-systems; the users Oscar (manager), Nilan, Nisath,
 Kulunu, Upul and Sajith; and the verdict, status and flag-type lists.
 
-On first run, Oscar sets his password (`POST /api/setup`). He then gives each designer a
-temporary password, which they must change at their first sign-in.
+## Passwords and users
+
+On the **first start** every user gets a random temporary password. The list is printed in
+the server window and saved to `data/initial-passwords.txt`. Hand each person their password;
+they must choose their own at first sign-in. Delete the file once everyone has signed in.
+
+**Adding people:** the manager opens **Users** in the app, fills in the name (and optionally
+email and role), and presses *Add user*. A temporary password is shown once. Leave the
+password box empty to have one generated. *Reset password* works the same way. Users are
+never deleted; set them inactive instead so their history stays.
+
+**From the server PC** (for example if the manager password is lost):
+
+```
+npm run user -- list
+npm run user -- add "Name" --role designer --email name@company.com
+npm run user -- reset "Oscar"
+npm run user -- deactivate "Name"
+```
+
+## Development
+
+```
+npm run dev          # API on :8080 with reload
+npm run dev:client   # UI on :5173 (proxies /api to :8080)
+```
 
 ## Configuration
 
@@ -41,7 +67,7 @@ Optional `config.json` next to `package.json`:
 }
 ```
 
-## How it works (stage 1)
+## How it works
 
 | Area | Where |
 |---|---|
@@ -52,6 +78,8 @@ Optional `config.json` next to `package.json`:
 | Who may edit what | `server/src/permissions.ts` |
 | Audit log, follows, notifications, live events | `server/src/context.ts` |
 | REST routes | `server/src/routes/*.ts`, `server/src/auth.ts` |
+| User and password helpers, console command | `server/src/services/users.ts`, `server/src/cli.ts` |
+| Front end (React + Vite) | `client/src/` |
 
 ### Rules
 - **IDs:** `SH-C01` (running number per domain), `SH-C01-I03` (per consideration), and
