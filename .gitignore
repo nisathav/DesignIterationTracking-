@@ -4,3 +4,4 @@ data/
 backups/
 config.json
 *.log
+tracker.log

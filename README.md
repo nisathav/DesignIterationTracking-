@@ -10,6 +10,25 @@ other people and domains. Every iteration and every hand-over is traceable.
 > in stage 3. The dashboard, trace view, domain admin, Excel export/import and backups
 > come in stage 4.
 
+## Try it in the browser (GitHub Codespaces)
+
+No install needed. This is for testing only: the database lives in the codespace and is
+lost when the codespace is deleted.
+
+1. On the repository page on GitHub, switch to the branch you want to test.
+2. Click **Code → Codespaces → Create codespace on <branch>**.
+3. Wait for the setup to finish (about 2-3 minutes the first time: install and build).
+   The tracker then starts by itself, and the terminal shows the temporary passwords.
+4. Open the **PORTS** tab and click the globe icon next to port **8080**. If a browser tab
+   opened automatically, use that.
+5. Sign in as Oscar with his temporary password and choose a new one.
+
+To let colleagues try it, right-click port 8080 → **Port visibility → Public** and send them
+the address. They still need to sign in. Set it back to Private when you're done.
+Stop the codespace when you're not using it, so it doesn't use your free monthly hours.
+If the tracker isn't running (for example after the codespace restarts), run
+`bash scripts/codespace-start.sh` in the terminal.
+
 ## Requirements
 
 - Node.js 20 or 22 LTS (Windows x64 prebuilt binaries are used for SQLite, no compiler needed).
