@@ -2,7 +2,7 @@
   "name": "Design Iteration Tracker",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
   "postCreateCommand": "npm install && npm run build",
-  "postAttachCommand": "bash scripts/codespace-start.sh",
+  "postAttachCommand": "bash scripts/codespace-start.sh attach",
   "forwardPorts": [8080],
   "portsAttributes": {
     "8080": { "label": "Design Iteration Tracker", "onAutoForward": "openBrowser" }

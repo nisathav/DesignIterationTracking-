@@ -26,8 +26,15 @@ lost when the codespace is deleted.
 To let colleagues try it, right-click port 8080 → **Port visibility → Public** and send them
 the address. They still need to sign in. Set it back to Private when you're done.
 Stop the codespace when you're not using it, so it doesn't use your free monthly hours.
-If the tracker isn't running (for example after the codespace restarts), run
-`bash scripts/codespace-start.sh` in the terminal.
+**Commands** (in the codespace terminal):
+
+| Command | What it does |
+|---|---|
+| `bash scripts/codespace-start.sh update` | Get the latest code from GitHub, build and restart. Use this after new changes are pushed. |
+| `bash scripts/codespace-start.sh` | Build and restart (for example after the codespace restarts). |
+
+Both keep the test database. After running one, refresh the browser tab. Don't run
+`npm start` yourself while the tracker is already running: port 8080 is then in use.
 
 ## Requirements
 

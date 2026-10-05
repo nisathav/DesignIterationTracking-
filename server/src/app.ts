@@ -49,13 +49,15 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
   registerAdminRoutes(app, svc);
   registerSocialRoutes(app, svc);
 
-  // The built front end (dist/client), with every non-API path answered by
-  // index.html so browser routes like /considerations/SH-C01 work on reload.
+  // The built front end (dist/client). Files are looked up on every request,
+  // so a rebuild is picked up without restarting. Browser routes such as
+  // /considerations/SH-C01 (no file extension) are answered with index.html.
   const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
-  const hasClient = fs.existsSync(path.join(clientDir, 'index.html'));
-  if (hasClient) await app.register(fastifyStatic, { root: clientDir, wildcard: false });
+  await app.register(fastifyStatic, { root: clientDir, wildcard: true });
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/') || !hasClient || req.method !== 'GET') {
+    const urlPath = req.url.split('?')[0];
+    const isPage = req.method === 'GET' && !urlPath.startsWith('/api/') && !path.extname(urlPath);
+    if (!isPage || !fs.existsSync(path.join(clientDir, 'index.html'))) {
       return reply.code(404).send({ error: 'not_found', message: 'Not found' });
     }
     return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
