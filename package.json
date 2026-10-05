@@ -12,7 +12,8 @@
     "start": "node dist/server/index.js",
     "dev": "tsx watch server/src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p server/tsconfig.json --noEmit"
+    "typecheck": "tsc -p server/tsconfig.json --noEmit",
+    "user": "node dist/server/cli.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { issueInitialPasswords } from '../src/services/users.js';
 import { client, login, makeApp, newConsideration, type TestApp } from './helpers.js';
 
 let t: TestApp;
@@ -55,7 +56,8 @@ describe('authentication', () => {
 
     const oscar = await login(t.app, 'Oscar', 'manager-pass');
     const reset = await oscar.post(`/api/users/${t.userId('Nilan')}/password`, { password: 'temporary1' });
-    expect(reset.body.mustChangePassword).toBe(1);
+    expect(reset.body.user.mustChangePassword).toBe(1);
+    expect(reset.body.temporaryPassword).toBe('temporary1');
 
     // Nilan must choose a new password before using the app.
     const nilan = await login(t.app, 'Nilan', 'temporary1');
@@ -66,6 +68,46 @@ describe('authentication', () => {
     // Other sessions were signed out by the change; the new password works.
     expect((await otherTab.get('/api/auth/me')).status).toBe(401);
     expect((await (await login(t.app, 'Nilan', 'nilans-own')).get('/api/auth/me')).body.name).toBe('Nilan');
+  });
+});
+
+describe('passwords and new users', () => {
+  it('issues a temporary password to every seeded user on first start', async () => {
+    t = await makeApp({ passwords: false });
+    const issued = await issueInitialPasswords(t.db);
+    expect(issued.map((u) => u.name)).toEqual(['Oscar', 'Nilan', 'Nisath', 'Kulunu', 'Upul', 'Sajith']);
+    expect(new Set(issued.map((u) => u.password)).size).toBe(6);
+    for (const u of issued) expect(u.password).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+    // Running again issues nothing: passwords are only set once.
+    expect(await issueInitialPasswords(t.db)).toEqual([]);
+    expect((await client(t.app).get('/api/setup')).body.needsSetup).toBe(false);
+
+    const oscar = await login(t.app, 'Oscar', issued[0].password);
+    expect((await oscar.get('/api/auth/me')).body.mustChangePassword).toBe(true);
+    expect((await oscar.get('/api/users')).body.error).toBe('password_change_required');
+    expect((await oscar.post('/api/auth/password', { newPassword: 'oscars-own' })).status).toBe(200);
+    expect((await oscar.get('/api/users')).status).toBe(200);
+  });
+
+  it('lets the manager create a user with a generated or chosen password', async () => {
+    t = await makeApp();
+    const oscar = await t.as('Oscar');
+    const res = await oscar.post('/api/users', { name: 'Dinuka', email: 'dinuka@example.com' });
+    expect(res.status).toBe(201);
+    expect(res.body.user).toMatchObject({ name: 'Dinuka', role: 'designer', active: 1, mustChangePassword: 1 });
+    expect(res.body.temporaryPassword).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+    const dinuka = await login(t.app, 'Dinuka', res.body.temporaryPassword);
+    expect((await dinuka.get('/api/auth/me')).body.name).toBe('Dinuka');
+
+    const chosen = await oscar.post('/api/users', { name: 'Second Manager', role: 'manager', password: 'chosen-pass' });
+    expect(chosen.body.temporaryPassword).toBe('chosen-pass');
+    expect((await oscar.post('/api/users', { name: 'dinuka' })).status).toBe(409);
+    expect((await oscar.post('/api/users', { name: 'Short', password: 'abc' })).status).toBe(400);
+
+    // Reset without a password generates one.
+    const reset = await oscar.post(`/api/users/${res.body.user.id}/password`, {});
+    expect(reset.body.temporaryPassword).toMatch(/^[a-z2-9-]{14}$/);
+    expect((await dinuka.get('/api/auth/me')).status).toBe(401);
   });
 });
 

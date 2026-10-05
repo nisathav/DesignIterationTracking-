@@ -5,6 +5,7 @@ import { endSessionsOf, password, requireManager, requireUser } from '../auth.js
 import { badRequest, conflict, notFound, stale } from '../errors.js';
 import { behaviours, getLookup, listLookups, type LookupCategory } from '../lookups.js';
 import { hashPassword } from '../passwords.js';
+import { generatePassword, insertUser, storePassword } from '../services/users.js';
 import { nowIso } from '../time.js';
 import { colour, id, parse, required, version } from '../validation.js';
 
@@ -48,20 +49,19 @@ export function registerAdminRoutes(app: FastifyInstance, svc: Services) {
     return db.prepare(`${USER_SELECT} ORDER BY name`).all();
   });
 
+  /** Create a user. Without a password, a temporary one is generated and returned once. */
   app.post('/api/users', async (req, reply) => {
     const me = requireManager(req);
-    const body = parse(z.object({ name: required(80), email, role: role.default('designer'), password }).strict(), req.body);
-    const hash = await hashPassword(body.password);
+    const body = parse(z.object({ name: required(80), email, role: role.default('designer'), password: password.optional() }).strict(), req.body);
+    const temporaryPassword = body.password ?? generatePassword();
+    const hash = await hashPassword(temporaryPassword);
     const uid = write(svc, me, (ctx) => {
-      if (db.prepare('SELECT 1 FROM users WHERE name = ?').get(body.name)) throw conflict(`A user called ${body.name} already exists`);
-      const newId = Number(db.prepare(
-        'INSERT INTO users (name, email, role, password_hash, must_change_password, created_at) VALUES (?, ?, ?, ?, 1, ?)',
-      ).run(body.name, body.email, body.role, hash, nowIso()).lastInsertRowid);
+      const newId = insertUser(db, body, hash);
       ctx.audit({ action: 'create', entityType: 'user', entityId: newId, newValue: { name: body.name, email: body.email, role: body.role } });
       return newId;
     });
     reply.code(201);
-    return getUser(uid);
+    return { user: getUser(uid), temporaryPassword };
   });
 
   app.patch('/api/users/:id', async (req) => {
@@ -95,20 +95,22 @@ export function registerAdminRoutes(app: FastifyInstance, svc: Services) {
     });
   });
 
-  /** Manager sets a temporary password; the user must change it at next sign-in. */
+  /**
+   * Manager sets a temporary password (generated when none is given and
+   * returned once); the user must change it at next sign-in.
+   */
   app.post('/api/users/:id/password', async (req) => {
     const me = requireManager(req);
     const { id: uid } = parse(z.object({ id }), req.params);
-    const body = parse(z.object({ password }).strict(), req.body);
-    const hash = await hashPassword(body.password);
+    const body = parse(z.object({ password: password.optional() }).strict(), req.body ?? {});
+    const temporaryPassword = body.password ?? generatePassword();
+    const hash = await hashPassword(temporaryPassword);
     write(svc, me, (ctx) => {
       if (!getUser(uid)) throw notFound('User');
-      db.prepare('UPDATE users SET password_hash = ?, must_change_password = ?, version = version + 1 WHERE id = ?')
-        .run(hash, uid === me.id ? 0 : 1, uid);
+      storePassword(db, uid, hash, uid !== me.id);
       ctx.audit({ action: 'update', entityType: 'user', entityId: uid, field: 'password', newValue: '(reset)' });
-      endSessionsOf(db, uid);
     });
-    return getUser(uid);
+    return { user: getUser(uid), temporaryPassword };
   });
 
   // ----- domains -----

@@ -1,9 +1,21 @@
 import os from 'node:os';
+import path from 'node:path';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { issueInitialPasswords, writePasswordSheet } from './services/users.js';
 
 const config = loadConfig();
-const { app } = await buildApp({ config, logger: true });
+const { app, svc } = await buildApp({ config, logger: true });
+
+// First start: every seeded user gets a temporary password, shown once here
+// and saved next to the database. Each person changes it at first sign-in.
+const issued = await issueInitialPasswords(svc.db);
+if (issued.length) {
+  const file = writePasswordSheet(path.dirname(path.resolve(config.dbFile)), issued, 'Temporary passwords');
+  console.log('\nTemporary passwords (each person must change theirs at first sign-in):');
+  for (const u of issued) console.log(`  ${u.name.padEnd(16)} ${u.password}`);
+  console.log(`Saved to ${file}. Delete that file once everyone has signed in.\n`);
+}
 
 await app.listen({ host: config.host, port: config.port });
 
