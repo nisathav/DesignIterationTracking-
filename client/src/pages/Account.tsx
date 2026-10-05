@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, signOut } from '../api';
 import { useMe } from '../hooks';
 import { ErrorBox, Field } from '../components/ui';
 
@@ -100,11 +100,6 @@ export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
       setError(err);
     }
   };
-  const logout = async () => {
-    await api.post('/api/auth/logout');
-    qc.clear();
-    await qc.resetQueries();
-  };
   return (
     <form className={forced ? 'center-card' : 'panel panel-body narrow'} onSubmit={submit}>
       <h1>{forced ? `Welcome, ${me?.name}` : 'Change password'}</h1>
@@ -125,7 +120,7 @@ export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
       <div className="row gap">
         <button className="btn primary">Save password</button>
         {forced && (
-          <button type="button" className="btn ghost" onClick={logout}>
+          <button type="button" className="btn ghost" onClick={signOut}>
             Sign out
           </button>
         )}

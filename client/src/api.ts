@@ -19,8 +19,28 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const res = await fetch(url, init);
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  if (res.status === 401 && !SIGN_IN_URLS.includes(url)) {
+    // Session ended (signed out elsewhere, expired, or user deactivated): back to the sign-in page.
+    goToSignIn();
+  }
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details);
   return data as T;
+}
+
+// Requests that are expected to answer 401 while signed out.
+const SIGN_IN_URLS = ['/api/auth/me', '/api/auth/login', '/api/setup'];
+
+/** Full reload to the start page, so nothing from the previous session stays on screen. */
+export function goToSignIn(): void {
+  window.location.replace('/');
+}
+
+export async function signOut(): Promise<void> {
+  try {
+    await request('POST', '/api/auth/logout', {});
+  } finally {
+    goToSignIn();
+  }
 }
 
 export const api = {

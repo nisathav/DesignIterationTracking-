@@ -40,7 +40,7 @@ export function useMeta() {
 
 /**
  * Live updates: when anyone saves, refresh what is on screen.
- * Notifications are handled by the bell (stage 3) via the same stream.
+ * New notifications refresh the bell and pop up a toast.
  */
 export function useLiveUpdates(enabled: boolean) {
   const qc = useQueryClient();
@@ -56,7 +56,10 @@ export function useLiveUpdates(enabled: boolean) {
         clearTimeout(timer);
         timer = setTimeout(() => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'me' }), 300);
       });
-      es.addEventListener('notification', () => qc.invalidateQueries({ queryKey: ['notifications'] }));
+      es.addEventListener('notification', (e) => {
+        qc.invalidateQueries({ queryKey: ['notifications'] });
+        window.dispatchEvent(new CustomEvent('dit:notification', { detail: JSON.parse((e as MessageEvent).data) }));
+      });
       es.onerror = () => {
         es?.close();
         retry = setTimeout(connect, 5000);

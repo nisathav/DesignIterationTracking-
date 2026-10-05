@@ -1,8 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
-import { api, ApiError } from './api';
+import { useQuery } from '@tanstack/react-query';
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import { api, ApiError, signOut } from './api';
 import { useLiveUpdates, useMe } from './hooks';
 import { Loading } from './components/ui';
+import { Bell, Toasts } from './components/Notifications';
 import { LoginPage, SetupPage, ChangePasswordPage } from './pages/Account';
 import { NewEntryPage } from './pages/NewEntry';
 import { ConsiderationListPage, FlagListPage, IterationListPage } from './pages/Lists';
@@ -33,6 +34,7 @@ export function App() {
   return (
     <div className="app">
       <TopBar />
+      <Toasts />
       <main className="main">
         <Routes>
           <Route path="/" element={<Navigate to="/considerations" replace />} />
@@ -53,13 +55,6 @@ export function App() {
 
 function TopBar() {
   const { data: me } = useMe();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const logout = async () => {
-    await api.post('/api/auth/logout');
-    qc.clear();
-    navigate('/');
-  };
   return (
     <header className="topbar">
       <NavLink to="/" className="brand">
@@ -75,6 +70,7 @@ function TopBar() {
         {me?.role === 'manager' && <NavLink to="/admin/users">Users</NavLink>}
       </nav>
       <div className="user-menu">
+        <Bell />
         <span className="who">
           {me?.name}
           {me?.role === 'manager' && <span className="muted"> (manager)</span>}
@@ -82,7 +78,7 @@ function TopBar() {
         <NavLink to="/account/password" className="btn small ghost">
           Password
         </NavLink>
-        <button type="button" className="btn small ghost" onClick={logout}>
+        <button type="button" className="btn small ghost" onClick={signOut}>
           Sign out
         </button>
       </div>
