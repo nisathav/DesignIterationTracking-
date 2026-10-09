@@ -221,70 +221,55 @@ function Feed({ items, lastVisit, loaded }: { items: FeedItem[]; lastVisit: stri
 
 function TopicBlock({ t, open, onToggle }: { t: Topic; open: boolean; onToggle: () => void }) {
   const c = domainColours(t.domainColour ?? '#DDDDDD');
-  const latest = t.actions[0];
-  const earlier = t.actions.length - 1;
+  const n = t.actions.length;
   return (
     <div className={`topic ${open ? 'open' : ''} ${t.newCount ? 'has-new' : ''}`} style={{ borderLeftColor: c.accent }}>
-      <div className="topic-head" onClick={onToggle} style={{ background: c.tint }}>
-        <button
-          type="button"
-          className="chev"
-          aria-expanded={open}
-          aria-label={`${open ? 'Hide' : 'Show'} history of ${t.considerationId}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-        >
+      {/* Collapsed: only the consideration. Its history opens on click. */}
+      <button type="button" className="topic-head" onClick={onToggle} aria-expanded={open} style={{ background: c.tint }}>
+        <span className="chev" aria-hidden="true">
           ▸
-        </button>
+        </span>
         {t.domainCode && <DomainBadge code={t.domainCode} colour={t.domainColour!} />}
-        <Link className="idlink" to={recordPath(t.considerationId)} onClick={(e) => e.stopPropagation()}>
-          {t.considerationId}
-        </Link>
+        <span className="idlink">{t.considerationId}</span>
         <span className="topic-title">{t.title}</span>
         <span className="spacer" />
         {t.newCount > 0 && <span className="new-chip">{t.newCount} new</span>}
         <span className="muted small nowrap">{clock(t.latestAt)}</span>
-      </div>
-      {!open && (
-        <button type="button" className="topic-summary" onClick={onToggle} title="Show the history">
-          <Icon tone={latest.tone} />
-          <span className="summary-text">
-            <Sentence a={latest} cid={t.considerationId} links={false} />
-          </span>
-          {earlier > 0 && (
-            <span className="earlier muted small">
-              +{earlier} earlier update{earlier > 1 ? 's' : ''}
-            </span>
-          )}
-          <span className="muted small people">{t.people.join(', ')}</span>
-        </button>
-      )}
+      </button>
       {open && (
-        <ol className="topic-history">
-          {t.actions.map((a) => (
-            <li key={a.key} className={`ev ${a.isNew ? 'is-new' : ''}`}>
-              <Icon tone={a.tone} />
-              <div className="ev-main">
-                <div>
-                  <Sentence a={a} cid={t.considerationId} />
-                  {a.verdict && (
-                    <>
-                      {' '}
-                      <VerdictBadge label={a.verdict.label} behaviour={a.verdict.behaviour} />
-                    </>
-                  )}
-                  {a.statusLabel && <span className="muted"> {a.statusLabel}</span>}
+        <>
+          <ol className="topic-history">
+            {t.actions.map((a) => (
+              <li key={a.key} className={`ev ${a.isNew ? 'is-new' : ''}`}>
+                <Icon tone={a.tone} />
+                <div className="ev-main">
+                  <div>
+                    <Sentence a={a} cid={t.considerationId} />
+                    {a.verdict && (
+                      <>
+                        {' '}
+                        <VerdictBadge label={a.verdict.label} behaviour={a.verdict.behaviour} />
+                      </>
+                    )}
+                    {a.statusLabel && <span className="muted"> {a.statusLabel}</span>}
+                  </div>
+                  {a.quote && <div className="ev-quote">{a.quote.length > 300 ? `${a.quote.slice(0, 300)}...` : a.quote}</div>}
                 </div>
-                {a.quote && <div className="ev-quote">{a.quote.length > 300 ? `${a.quote.slice(0, 300)}...` : a.quote}</div>}
-              </div>
-              <span className="ev-time" title={fmtDateTime(a.at)}>
-                {clock(a.at)}
-              </span>
-            </li>
-          ))}
-        </ol>
+                <span className="ev-time" title={fmtDateTime(a.at)}>
+                  {clock(a.at)}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="topic-foot">
+            <span className="muted small">
+              {n} update{n > 1 ? 's' : ''} by {t.people.join(', ')}
+            </span>
+            <Link className="small" to={recordPath(t.considerationId)}>
+              Open {t.considerationId} →
+            </Link>
+          </div>
+        </>
       )}
     </div>
   );

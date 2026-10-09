@@ -418,3 +418,7 @@ input, select { min-height: 28px; }
   .topic-summary .earlier, .topic-summary .people { grid-column: 2; }
   .summary-text { white-space: normal; }
 }
+.topic-head { width: 100%; border: none; text-align: left; font: inherit; color: inherit; }
+.topic-head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.topic-head .chev { pointer-events: none; }
+.topic-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px 8px 42px; border-top: 1px solid #f0f2f5; flex-wrap: wrap; }
