@@ -81,9 +81,34 @@ npm run dev          # API on :8080 with reload
 npm run dev:client   # UI on :5173 (proxies /api to :8080)
 ```
 
+## Teams channel alerts
+
+The tracker can post alerts to one Teams channel. Each message @mentions the person it is for
+(by the work email set in **Users**), so they get a Teams notification. Each message also has
+an **Open in tracker** button.
+
+1. In Teams, on the channel: **⋯ → Workflows →** "Post to a channel when a webhook request is
+   received". Copy the web address it gives you.
+2. In the tracker: **Admin → Teams alerts**. Paste the address, check the tracker address used for
+   the button (e.g. `http://192.168.1.25:8080`), tick **Post alerts to Teams**, then **Save**
+   and **Send test message**.
+3. Make sure everyone has their work email in **Admin → Users**.
+
+What is posted (each can be switched off):
+- a flag is assigned or reassigned (mentions the assignee);
+- a review outcome is given (mentions the author, the owner and the raiser);
+- a flag is closed (mentions the raiser);
+- a flag is escalated or its escalation resolved;
+- a flag is 3 days overdue (mentions the assignee and the managers);
+- an iteration is closed with verdict Fail (mentions the managers).
+
+The tracker PC needs outbound internet access to reach Teams; nothing is opened to it from
+outside. If Teams can't be reached, saves still work, and the error shows on the Teams alerts
+page.
+
 ## Exporting to Excel
 
-Managers open **Export** in the menu, choose the domains (or all), all or only open
+Managers open **Admin → Export to Excel**, choose the domains (or all), all or only open
 considerations, and optionally comments and the change history for a date range, then press
 **Download Excel file**. The workbook `DesignTracker_<date>.xlsx` has:
 

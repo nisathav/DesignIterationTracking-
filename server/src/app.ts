@@ -15,6 +15,8 @@ import { registerRecordRoutes } from './routes/records.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { registerExportRoutes } from './routes/export.js';
+import { registerAlertRoutes } from './routes/alerts.js';
+import { startTeams } from './teams.js';
 
 export interface BuildOptions {
   config: Config;
@@ -50,6 +52,8 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
   registerAdminRoutes(app, svc);
   registerSocialRoutes(app, svc);
   registerExportRoutes(app, svc);
+  registerAlertRoutes(app, svc);
+  startTeams(svc, (m) => app.log.warn(m));
 
   // The built front end (dist/client). Files are looked up on every request,
   // so a rebuild is picked up without restarting. Browser routes such as

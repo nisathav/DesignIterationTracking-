@@ -31,6 +31,12 @@ export function escalateOverdueFlags(svc: Services, days = svc.config.overdueEsc
         title: `${f.id} is ${late} days overdue (${f.assignedToName}, due ${f.dueDate})`,
         body: f.request,
       });
+      ctx.teams({
+        event: 'overdue', entityId: f.id, mention: [f.assignedToId, ...ctx.managers()],
+        title: `Overdue by ${late} days: ${f.id}`,
+        text: `{mentions}, this ${f.typeLabel} for ${f.assignedToName} was due on ${f.dueDate} (${f.considerationTitle}).`,
+        quote: f.request,
+      });
       mark.run(nowIso(), f.id);
     }
   });

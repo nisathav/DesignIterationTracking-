@@ -94,7 +94,7 @@ export function UsersPage() {
           <Field label="Name (used to sign in)">
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={80} />
           </Field>
-          <Field label="Email (optional)">
+          <Field label="Work email (optional)" hint="used for email alerts and Teams @mentions">
             <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
           <Field label="Role">

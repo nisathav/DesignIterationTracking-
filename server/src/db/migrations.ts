@@ -217,4 +217,11 @@ export const migrations: string[] = [
   -- Why a manager closed an iteration without all reviews approved.
   ALTER TABLE iterations ADD COLUMN close_override_reason TEXT;
   `,
+  /* 3: app settings edited in Admin (e.g. Teams alerts) */ `
+  CREATE TABLE settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  `,
 ];

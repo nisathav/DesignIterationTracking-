@@ -60,6 +60,23 @@ export interface AuditEntry {
   event?: string | null;
 }
 
+/** Teams channel alert kinds; each can be switched on or off in Admin > Alerts. */
+export type TeamsEvent = 'flag_assigned' | 'review_outcome' | 'flag_closed' | 'escalation' | 'overdue' | 'iteration_failed';
+
+/** One card for the Teams channel, posted after the save commits. */
+export interface TeamsPost {
+  event: TeamsEvent;
+  /** Bold first line of the card. */
+  title: string;
+  /** Sentence under the title; {mentions} is replaced by the @mentions. */
+  text: string;
+  quote?: string;
+  /** Users to @mention (by their work email). */
+  mention: number[];
+  entityId: string;
+  facts?: Array<[string, string]>;
+}
+
 export interface NotifyInput {
   kind: string;
   entityType: 'consideration' | 'iteration' | 'flag' | null;
@@ -80,6 +97,7 @@ export class WriteCtx {
   readonly batchId = randomUUID();
   readonly at = nowIso();
   readonly notifications: NotificationOut[] = [];
+  readonly teamsPosts: TeamsPost[] = [];
   readonly activity: ActivityOut[] = [];
   private notified = new Set<string>();
 
@@ -147,6 +165,11 @@ export class WriteCtx {
     }
   }
 
+  /** Queue a Teams channel card (sent only if Teams alerts are set up and that kind is switched on). */
+  teams(post: TeamsPost): void {
+    this.teamsPosts.push(post);
+  }
+
   follow(userId: number, entityType: 'consideration' | 'domain', entityId: string | number): void {
     this.db
       .prepare('INSERT OR IGNORE INTO follows (user_id, entity_type, entity_id, created_at) VALUES (?, ?, ?, ?)')
@@ -179,6 +202,7 @@ export function write<T>(svc: Services, user: SessionUser, fn: (ctx: WriteCtx) =
   const ctx = new WriteCtx(svc.db, user);
   const result = svc.db.transaction(() => fn(ctx)).immediate();
   for (const n of ctx.notifications) svc.bus.emit('notification', n);
+  for (const p of ctx.teamsPosts) svc.bus.emit('teams', p);
   if (ctx.activity.length) svc.bus.emit('activity', { by: user.id, items: ctx.activity });
   return result;
 }

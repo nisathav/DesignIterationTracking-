@@ -218,12 +218,36 @@ export function createIteration(ctx: WriteCtx, input: IterationCreate): string {
   return iid;
 }
 
+/** "asked you to review" / "sent you an FYI" / "gave you an action" for a flag type behaviour. */
+function flagAsk(typeBehaviour: string, typeLabel: string): string {
+  if (typeBehaviour === 'review') return 'asks you to review';
+  if (typeBehaviour === 'fyi') return 'sent you an FYI on';
+  if (typeBehaviour === 'action') return 'needs an action from you on';
+  return `assigned you a ${typeLabel} on`;
+}
+
+/** Teams card for a newly assigned flag: @mentions the assignee. */
+function teamsAssigned(ctx: WriteCtx, f: { id: string; iterationId: string; considerationTitle: string; typeBehaviour: string; typeLabel: string; affectedDomainCode: string; sourceDomainCode: string; dueDate: string | null; request: string }, assigneeId: number) {
+  ctx.teams({
+    event: 'flag_assigned', entityId: f.id, mention: [assigneeId],
+    title: `${f.typeLabel} for you: ${f.id}`,
+    text: `{mentions}, ${ctx.user.name} ${flagAsk(f.typeBehaviour, f.typeLabel)} ${f.iterationId} (${f.considerationTitle}).`,
+    quote: f.request,
+    facts: [['From', f.sourceDomainCode], ['Affects', f.affectedDomainCode], ['Due', f.dueDate ?? 'no due date']],
+  });
+}
+
 /** Managers hear about every iteration that is closed with a Fail verdict. */
 function notifyFailedClose(ctx: WriteCtx, it: { id: string; verdictBehaviour: string | null; considerationTitle: string }) {
   if (it.verdictBehaviour !== 'fail') return;
   ctx.notify(ctx.managers(), {
     kind: 'iteration_failed', entityType: 'iteration', entityId: it.id,
     title: `${it.id} was closed with verdict Fail (${ctx.user.name})`, body: it.considerationTitle,
+  });
+  ctx.teams({
+    event: 'iteration_failed', entityId: it.id, mention: ctx.managers(),
+    title: `Iteration closed with verdict Fail: ${it.id}`,
+    text: `{mentions}, ${ctx.user.name} closed ${it.id} (${it.considerationTitle}) with verdict Fail.`,
   });
 }
 
@@ -389,6 +413,7 @@ export function createFlag(ctx: WriteCtx, input: FlagCreate): string {
     kind: 'flag_raised', entityType: 'flag', entityId: fid,
     title: `${fid} raised by ${user.name} for ${assignee.name} (${affected.code})`, body: input.request,
   });
+  teamsAssigned(ctx, row, assignee.id);
   return fid;
 }
 
@@ -477,6 +502,7 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
       title: `${user.name} assigned you ${id} (${lookupLabel(db, next.typeId)}${next.dueDate ? `, due ${next.dueDate}` : ''})`,
       body: next.request,
     });
+    teamsAssigned(ctx, getFlag(db, id)!, next.assignedToId);
   }
   const changesNeeded = outcomeSet && next.reviewOutcome === 'changes_needed';
   const parts: string[] = [];
@@ -496,6 +522,23 @@ export function updateFlag(ctx: WriteCtx, id: string, input: FlagUpdate) {
       kind, entityType: 'flag', entityId: id,
       title: `${id} ${parts.join(', ')} by ${user.name}`,
       body: responseChanged || outcomeSet ? next.response : next.request,
+    });
+  }
+
+  if (outcomeSet && next.reviewOutcome) {
+    ctx.teams({
+      event: 'review_outcome', entityId: id,
+      mention: [f.iterationAuthorId, f.considerationOwnerId, f.raisedById].filter((u) => u !== user.id),
+      title: `Review ${outcomeLabel(next.reviewOutcome)}: ${id}`,
+      text: `{mentions}, ${user.name} reviewed ${f.iterationId} (${f.considerationTitle}): ${outcomeLabel(next.reviewOutcome)}.`,
+      quote: next.response || undefined,
+    });
+  } else if (closing && f.raisedById !== user.id) {
+    ctx.teams({
+      event: 'flag_closed', entityId: id, mention: [f.raisedById],
+      title: `Flag closed: ${id}`,
+      text: `{mentions}, ${user.name} closed the ${f.typeLabel} you raised on ${f.iterationId} (${f.considerationTitle}).`,
+      quote: next.response || undefined,
     });
   }
 
@@ -540,6 +583,13 @@ export function escalateFlag(ctx: WriteCtx, id: string, reason: string) {
     kind: 'flag_escalated', entityType: 'flag', entityId: id,
     title: `${id} was escalated to the managers by ${user.name}`, body: reason,
   });
+  ctx.teams({
+    event: 'escalation', entityId: id, mention: ctx.managers(),
+    title: `Escalated to the managers: ${id}`,
+    text: `{mentions}, ${user.name} needs a manager decision on ${id} (${f.considerationTitle}).`,
+    quote: reason,
+    facts: [['Raised by', f.raisedByName], ['Assigned to', f.assignedToName]],
+  });
   return getFlag(db, id)!;
 }
 
@@ -561,6 +611,12 @@ export function resolveEscalation(ctx: WriteCtx, id: string, resolution: string)
   ctx.notify([f.raisedById, f.assignedToId, ...(escalatedBy ? [escalatedBy] : [])], {
     kind: 'flag_escalation_resolved', entityType: 'flag', entityId: id,
     title: `${user.name} resolved the escalation on ${id}`, body: resolution,
+  });
+  ctx.teams({
+    event: 'escalation', entityId: id, mention: [f.raisedById, f.assignedToId, ...(escalatedBy ? [escalatedBy] : [])].filter((u) => u !== user.id),
+    title: `Escalation resolved: ${id}`,
+    text: `{mentions}, ${user.name} decided on ${id} (${f.considerationTitle}).`,
+    quote: resolution,
   });
   return getFlag(db, id)!;
 }

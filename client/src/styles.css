@@ -434,3 +434,21 @@ input, select { min-height: 28px; }
 .sheet-list th { text-align: left; white-space: nowrap; padding: 6px 16px 6px 0; vertical-align: top; width: 1%; }
 .sheet-list td { padding: 6px 0; color: var(--muted); }
 .sheet-list tr + tr th, .sheet-list tr + tr td { border-top: 1px solid var(--line-soft); }
+
+/* ---------- teams alerts ---------- */
+.steps { margin: 0 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.teams-form { display: flex; flex-direction: column; gap: 12px; max-width: 900px; }
+.teams-form .field .check { margin: 2px 0; align-items: flex-start; white-space: normal; }
+.check.big { font-weight: 600; font-size: 14px; }
+
+/* admin menu */
+.nav { overflow: visible; }
+.admin-menu { position: relative; }
+.admin-btn { background: none; border: none; color: #d6e2ef; padding: 6px 10px; border-radius: var(--radius); cursor: pointer; white-space: nowrap; }
+.admin-btn:hover, .admin-btn[aria-expanded="true"] { background: rgba(255,255,255,.1); color: #fff; }
+.admin-btn.active { background: rgba(255,255,255,.18); color: #fff; }
+.admin-pop { position: absolute; top: calc(100% + 4px); left: 0; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 180px; padding: 4px; z-index: 30; display: flex; flex-direction: column; }
+.nav .admin-pop a { color: var(--text); padding: 7px 10px; border-radius: 4px; }
+.nav .admin-pop a:hover { background: #f0f3f6; color: var(--text); }
+.nav .admin-pop a.active { background: #eef4fa; color: var(--brand-dark); font-weight: 600; }
+.teams-form .field .check input { margin-top: 3px; }

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api, ApiError, signOut } from './api';
 import { useLiveUpdates, useMe } from './hooks';
 import { Loading } from './components/ui';
@@ -12,6 +13,7 @@ import { FlagPage } from './pages/Flag';
 import { UsersPage } from './pages/AdminUsers';
 import { DomainsPage } from './pages/AdminDomains';
 import { ExportPage } from './pages/AdminExport';
+import { AlertsPage } from './pages/AdminAlerts';
 import { HomePage } from './pages/Home';
 import { BoardPage } from './pages/Board';
 import { MyItemsPage, useMyItems } from './components/MyItems';
@@ -54,6 +56,7 @@ export function App() {
           <Route path="/admin/users" element={me.data!.role === 'manager' ? <UsersPage /> : <Navigate to="/" />} />
           <Route path="/admin/domains" element={me.data!.role === 'manager' ? <DomainsPage /> : <Navigate to="/" />} />
           <Route path="/admin/export" element={me.data!.role === 'manager' ? <ExportPage /> : <Navigate to="/" />} />
+          <Route path="/admin/alerts" element={me.data!.role === 'manager' ? <AlertsPage /> : <Navigate to="/" />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
           <Route path="*" element={<div className="panel panel-body">Page not found.</div>} />
         </Routes>
@@ -85,14 +88,7 @@ function TopBar() {
         <NavLink to="/considerations">Considerations</NavLink>
         <NavLink to="/iterations">Iterations</NavLink>
         <NavLink to="/flags">Flags</NavLink>
-        {me?.role === 'manager' && (
-          <>
-            <span className="nav-sep" />
-            <NavLink to="/admin/users">Users</NavLink>
-            <NavLink to="/admin/domains">Domains &amp; lists</NavLink>
-            <NavLink to="/admin/export">Export</NavLink>
-          </>
-        )}
+        {me?.role === 'manager' && <AdminMenu />}
       </nav>
       <div className="user-menu">
         <Bell />
@@ -108,5 +104,45 @@ function TopBar() {
         </button>
       </div>
     </header>
+  );
+}
+
+const ADMIN_LINKS: Array<[string, string]> = [
+  ['/admin/users', 'Users'],
+  ['/admin/domains', 'Domains & lists'],
+  ['/admin/alerts', 'Teams alerts'],
+  ['/admin/export', 'Export to Excel'],
+];
+
+/** Manager pages under one menu, so the top bar stays on one line. */
+function AdminMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const active = location.pathname.startsWith('/admin');
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  return (
+    <div className="admin-menu" ref={ref}>
+      <button type="button" className={`admin-btn ${active ? 'active' : ''}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        Admin ▾
+      </button>
+      {open && (
+        <div className="admin-pop" role="menu">
+          {ADMIN_LINKS.map(([to, label]) => (
+            <NavLink key={to} to={to} role="menuitem">
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
