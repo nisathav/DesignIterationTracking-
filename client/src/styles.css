@@ -422,3 +422,15 @@ input, select { min-height: 28px; }
 .topic-head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .topic-head .chev { pointer-events: none; }
 .topic-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px 8px 42px; border-top: 1px solid #f0f2f5; flex-wrap: wrap; }
+
+/* ---------- export ---------- */
+.export-options { display: flex; flex-direction: column; gap: 16px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 16px; padding: 4px 10px; background: #fff; cursor: pointer; }
+.chip.on { border-color: var(--brand); background: #eef4fa; }
+.chip input { margin: 0; }
+.history-range { align-items: flex-end; margin-top: 4px; }
+.sheet-list { border-collapse: collapse; width: 100%; }
+.sheet-list th { text-align: left; white-space: nowrap; padding: 6px 16px 6px 0; vertical-align: top; width: 1%; }
+.sheet-list td { padding: 6px 0; color: var(--muted); }
+.sheet-list tr + tr th, .sheet-list tr + tr td { border-top: 1px solid var(--line-soft); }

@@ -14,6 +14,7 @@ import { registerAuth } from './auth.js';
 import { registerRecordRoutes } from './routes/records.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerSocialRoutes } from './routes/social.js';
+import { registerExportRoutes } from './routes/export.js';
 
 export interface BuildOptions {
   config: Config;
@@ -48,6 +49,7 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
   registerRecordRoutes(app, svc);
   registerAdminRoutes(app, svc);
   registerSocialRoutes(app, svc);
+  registerExportRoutes(app, svc);
 
   // The built front end (dist/client). Files are looked up on every request,
   // so a rebuild is picked up without restarting. Browser routes such as

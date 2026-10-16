@@ -81,6 +81,24 @@ npm run dev          # API on :8080 with reload
 npm run dev:client   # UI on :5173 (proxies /api to :8080)
 ```
 
+## Exporting to Excel
+
+Managers open **Export** in the menu, choose the domains (or all), all or only open
+considerations, and optionally comments and the change history for a date range, then press
+**Download Excel file**. The workbook `DesignTracker_<date>.xlsx` has:
+
+| Sheet | Contents |
+|---|---|
+| Summary | Who exported it and when, the selection, counts per domain and per person |
+| Considerations | One row per consideration, coloured by domain |
+| Iterations | The iteration log with verdicts in green / amber / red |
+| Flags | Reviews, FYIs and actions, with overdue due dates in red, review outcomes and escalations |
+| Comments | Optional |
+| Change history | Optional: every field change with old and new value |
+| Setup | Domains, owners and sub-systems |
+
+Every sheet has a frozen header and filters, and every ID links back to the tracker.
+
 ## How reviews and escalation work
 
 **Reviews.**

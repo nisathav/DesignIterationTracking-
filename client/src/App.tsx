@@ -11,6 +11,7 @@ import { ConsiderationPage } from './pages/Consideration';
 import { FlagPage } from './pages/Flag';
 import { UsersPage } from './pages/AdminUsers';
 import { DomainsPage } from './pages/AdminDomains';
+import { ExportPage } from './pages/AdminExport';
 import { HomePage } from './pages/Home';
 import { BoardPage } from './pages/Board';
 import { MyItemsPage, useMyItems } from './components/MyItems';
@@ -52,6 +53,7 @@ export function App() {
           <Route path="/flags/:id" element={<FlagPage />} />
           <Route path="/admin/users" element={me.data!.role === 'manager' ? <UsersPage /> : <Navigate to="/" />} />
           <Route path="/admin/domains" element={me.data!.role === 'manager' ? <DomainsPage /> : <Navigate to="/" />} />
+          <Route path="/admin/export" element={me.data!.role === 'manager' ? <ExportPage /> : <Navigate to="/" />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
           <Route path="*" element={<div className="panel panel-body">Page not found.</div>} />
         </Routes>
@@ -88,6 +90,7 @@ function TopBar() {
             <span className="nav-sep" />
             <NavLink to="/admin/users">Users</NavLink>
             <NavLink to="/admin/domains">Domains &amp; lists</NavLink>
+            <NavLink to="/admin/export">Export</NavLink>
           </>
         )}
       </nav>

@@ -324,7 +324,8 @@ export interface ListFilters {
   offset?: number;
 }
 
-const page = (f: ListFilters) => ` LIMIT ${Math.min(f.limit ?? 500, 2000)} OFFSET ${f.offset ?? 0}`;
+// The API validates limit (max 2000); internal callers such as the Excel export may ask for more.
+const page = (f: ListFilters) => ` LIMIT ${Math.min(Math.floor(f.limit ?? 500), 1_000_000)} OFFSET ${Math.floor(f.offset ?? 0)}`;
 
 export function listConsiderations(db: DB, f: ListFilters, userId: number): ConsiderationRow[] {
   const w = new Where();
