@@ -1,0 +1,11 @@
+{
+  "port": 8080,
+  "appUrl": "http://192.168.1.25:8080",
+  "overdueEscalationDays": 3,
+  "smtp": {
+    "host": "mail.company.local",
+    "port": 25,
+    "secure": false,
+    "from": "Design Tracker <tracker@company.com>"
+  }
+}

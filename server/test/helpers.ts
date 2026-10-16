@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { defaults } from '../src/config.js';
@@ -66,7 +69,8 @@ export async function makeApp(opts: { passwords?: boolean; file?: string } = {})
     cachedHash ??= await hashPassword(PASSWORD);
     db.prepare('UPDATE users SET password_hash = ?').run(cachedHash);
   }
-  const { app, svc } = await buildApp({ config: { ...defaults, dbFile: ':memory:', uploadDir: '/tmp/dit-test-uploads' }, db });
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dit-test-'));
+  const { app, svc } = await buildApp({ config: { ...defaults, dbFile: ':memory:', uploadDir: path.join(tmp, 'uploads'), backupDir: path.join(tmp, 'backups') }, db });
   await app.ready();
   const clients = new Map<string, Client>();
   return {

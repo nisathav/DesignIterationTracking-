@@ -1,9 +1,10 @@
-import { write, type Services, type SessionUser } from './context.js';
+import { SYSTEM_USER, write, type Services } from './context.js';
 import { listFlags } from './queries.js';
 import { localDate, now, nowIso } from './time.js';
+import { lastBackupDay, runBackup } from './backup.js';
+import { digestDue, sendWeeklyDigest } from './digest.js';
 
-/** Background jobs act as this user; it never matches a real user id. */
-export const SYSTEM_USER: SessionUser = { id: 0, name: 'Tracker', email: null, role: 'manager', mustChangePassword: false };
+export { SYSTEM_USER };
 
 /**
  * Tell the managers once about each open flag that is `days` or more past its
@@ -43,20 +44,38 @@ export function escalateOverdueFlags(svc: Services, days = svc.config.overdueEsc
   return flags.map((f) => f.id);
 }
 
-/** Runs the periodic jobs while the server is up. */
+/** Runs the periodic jobs while the server is up: overdue check, nightly backup, weekly digest. */
 export function startScheduler(svc: Services, log: (msg: string) => void): () => void {
-  const run = () => {
+  let backingUp = false;
+  const run = async () => {
     try {
       const ids = escalateOverdueFlags(svc);
       if (ids.length) log(`Overdue flags reported to managers: ${ids.join(', ')}`);
     } catch (e) {
-      log(`Scheduled job failed: ${(e as Error).message}`);
+      log(`Overdue check failed: ${(e as Error).message}`);
+    }
+    // Backup from 02:00, or as soon as the server runs if today's was missed.
+    try {
+      if (!backingUp && now().getHours() >= 2 && lastBackupDay(svc) !== localDate(now())) {
+        backingUp = true;
+        const b = await runBackup(svc);
+        log(`Backup written: ${b.file} (${Math.round(b.size / 1024)} KB)`);
+      }
+    } catch (e) {
+      log(`Backup failed: ${(e as Error).message}`);
+    } finally {
+      backingUp = false;
+    }
+    try {
+      if (digestDue(svc)) log(`Weekly digest sent to ${sendWeeklyDigest(svc)} people`);
+    } catch (e) {
+      log(`Weekly digest failed: ${(e as Error).message}`);
     }
   };
   const first = setTimeout(run, 60_000);
-  const hourly = setInterval(run, 3_600_000);
+  const every = setInterval(run, 10 * 60_000);
   return () => {
     clearTimeout(first);
-    clearInterval(hourly);
+    clearInterval(every);
   };
 }

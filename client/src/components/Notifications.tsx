@@ -26,7 +26,8 @@ function useOpenNotification() {
       await api.post('/api/notifications/read', { ids: [n.id] });
       qc.invalidateQueries({ queryKey: ['notifications'] });
     }
-    if (n.entityId) navigate(recordPath(n.entityId));
+    if (n.kind === 'digest') navigate(`/digest/${n.id}`);
+    else if (n.entityId) navigate(recordPath(n.entityId));
   };
 }
 

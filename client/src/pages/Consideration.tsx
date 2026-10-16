@@ -86,6 +86,9 @@ function Header({ c, originFlag }: { c: Consideration; originFlag: Flag | null }
         <h1>{c.title}</h1>
         <StatusBadge label={c.statusLabel} behaviour={c.statusBehaviour} />
         <div className="spacer" />
+        <Link className="btn small ghost" to={`/considerations/${c.id}/trace`} title="Diagram of the whole chain across domains">
+          Trace
+        </Link>
         <button type="button" className={`btn small ${following ? 'on' : 'ghost'}`} onClick={toggleFollow} title="Followers are notified of new iterations, flags and status changes">
           {following ? '★ Following' : '☆ Follow'}
         </button>

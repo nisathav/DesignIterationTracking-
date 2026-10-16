@@ -12,6 +12,9 @@ export interface SessionUser {
   mustChangePassword: boolean;
 }
 
+/** Background jobs (overdue check, digest) act as this user; it never matches a real user id. */
+export const SYSTEM_USER: SessionUser = { id: 0, name: 'Tracker', email: null, role: 'manager', mustChangePassword: false };
+
 export interface NotificationOut {
   id: number;
   userId: number;

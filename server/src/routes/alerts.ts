@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Services, TeamsEvent } from '../context.js';
-import { requireManager } from '../auth.js';
-import { badRequest } from '../errors.js';
+import path from 'node:path';
+import { requireManager, requireUser } from '../auth.js';
+import { badRequest, notFound } from '../errors.js';
+import { KEEP_DAYS, listBackups, runBackup } from '../backup.js';
+import { sendWeeklyDigest } from '../digest.js';
 import { TEAMS_EVENTS, getTeamsSettings, getTeamsStatus, postToTeams, saveTeamsSettings } from '../teams.js';
 import { parse } from '../validation.js';
 
@@ -51,5 +54,45 @@ export function registerAlertRoutes(app: FastifyInstance, svc: Services) {
       throw badRequest(`Teams did not accept the message: ${(e as Error).message}`);
     }
     return { ok: true, lastResult: getTeamsStatus(db) };
+  });
+}
+
+export function registerMaintenanceRoutes(app: FastifyInstance, svc: Services) {
+  const { db, config } = svc;
+
+  app.get('/api/admin/maintenance', async (req) => {
+    requireManager(req);
+    return {
+      backups: listBackups(svc),
+      keepDays: KEEP_DAYS,
+      backupDir: path.resolve(config.backupDir),
+      lastDigestWeek: (db.prepare("SELECT value FROM settings WHERE key = 'digest_week'").pluck().get() as string | undefined) ?? null,
+    };
+  });
+
+  app.post('/api/admin/backup', async (req) => {
+    const me = requireManager(req);
+    const b = await runBackup(svc);
+    req.log.info(`Backup made by ${me.name}: ${b.file}`);
+    return { backup: b, backups: listBackups(svc) };
+  });
+
+  /** Send last week's digest now (normally sent automatically on Monday morning). */
+  app.post('/api/admin/digest', async (req) => {
+    requireManager(req);
+    return { sent: sendWeeklyDigest(svc) };
+  });
+
+  /** One of my notifications, e.g. a weekly digest to read in full. */
+  app.get('/api/notifications/:id', async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), req.params);
+    const n = db.prepare(
+      `SELECT id, kind, entity_type AS entityType, entity_id AS entityId, title, body, is_read AS isRead, created_at AS createdAt
+       FROM notifications WHERE id = ? AND user_id = ?`,
+    ).get(id, user.id);
+    if (!n) throw notFound('Notification');
+    db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(id);
+    return n;
   });
 }

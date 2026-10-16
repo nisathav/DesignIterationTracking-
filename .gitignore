@@ -6,3 +6,4 @@ config.json
 *.log
 tracker.log
 build.log
+logs/

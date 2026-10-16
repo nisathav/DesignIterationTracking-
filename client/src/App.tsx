@@ -14,8 +14,13 @@ import { UsersPage } from './pages/AdminUsers';
 import { DomainsPage } from './pages/AdminDomains';
 import { ExportPage } from './pages/AdminExport';
 import { AlertsPage } from './pages/AdminAlerts';
+import { ImportPage } from './pages/AdminImport';
+import { BackupsPage } from './pages/AdminBackups';
+import { DigestPage } from './pages/Digest';
 import { HomePage } from './pages/Home';
 import { BoardPage } from './pages/Board';
+import { DashboardPage } from './pages/Dashboard';
+import { TracePage } from './pages/Trace';
 import { MyItemsPage, useMyItems } from './components/MyItems';
 
 export function App() {
@@ -50,6 +55,8 @@ export function App() {
           <Route path="/new" element={<NewEntryPage />} />
           <Route path="/considerations" element={<ConsiderationListPage />} />
           <Route path="/considerations/:id" element={<ConsiderationPage />} />
+          <Route path="/considerations/:id/trace" element={<TracePage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/iterations" element={<IterationListPage />} />
           <Route path="/flags" element={<FlagListPage />} />
           <Route path="/flags/:id" element={<FlagPage />} />
@@ -57,6 +64,9 @@ export function App() {
           <Route path="/admin/domains" element={me.data!.role === 'manager' ? <DomainsPage /> : <Navigate to="/" />} />
           <Route path="/admin/export" element={me.data!.role === 'manager' ? <ExportPage /> : <Navigate to="/" />} />
           <Route path="/admin/alerts" element={me.data!.role === 'manager' ? <AlertsPage /> : <Navigate to="/" />} />
+          <Route path="/admin/import" element={me.data!.role === 'manager' ? <ImportPage /> : <Navigate to="/" />} />
+          <Route path="/admin/backups" element={me.data!.role === 'manager' ? <BackupsPage /> : <Navigate to="/" />} />
+          <Route path="/digest/:id" element={<DigestPage />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
           <Route path="*" element={<div className="panel panel-body">Page not found.</div>} />
         </Routes>
@@ -84,6 +94,7 @@ function TopBar() {
         <NavLink to="/my-items">
           My items{myCount > 0 && <span className="nav-count">{myCount}</span>}
         </NavLink>
+        <NavLink to="/dashboard">Dashboard</NavLink>
         <NavLink to="/board">Board</NavLink>
         <NavLink to="/considerations">Considerations</NavLink>
         <NavLink to="/iterations">Iterations</NavLink>
@@ -112,6 +123,8 @@ const ADMIN_LINKS: Array<[string, string]> = [
   ['/admin/domains', 'Domains & lists'],
   ['/admin/alerts', 'Teams alerts'],
   ['/admin/export', 'Export to Excel'],
+  ['/admin/import', 'Import from Excel'],
+  ['/admin/backups', 'Backups & digest'],
 ];
 
 /** Manager pages under one menu, so the top bar stays on one line. */

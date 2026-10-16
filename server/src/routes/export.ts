@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { Services } from '../context.js';
 import { requireManager } from '../auth.js';
 import { buildWorkbook } from '../export.js';
+import { importWorkbook } from '../importer.js';
+import { badRequest } from '../errors.js';
 import { today } from '../time.js';
 import { flag, idList, isoDate, parse } from '../validation.js';
 
@@ -40,5 +42,27 @@ export function registerExportRoutes(app: FastifyInstance, svc: Services) {
       .header('Content-Disposition', `attachment; filename="DesignTracker_${today()}.xlsx"`)
       .header('Cache-Control', 'no-store');
     return reply.send(buffer);
+  });
+}
+
+export function registerImportRoutes(app: FastifyInstance, svc: Services) {
+  /**
+   * Manager-only import from an .xlsx in the export layout. With ?dryRun=1
+   * nothing is saved; the result lists what would be created, skipped and why
+   * not. Without it, everything is saved in one go, or nothing if any row has
+   * an error.
+   */
+  app.post('/api/import', async (req) => {
+    const me = requireManager(req);
+    const q = parse(z.object({ dryRun: flag }), req.query);
+    const part = await req.file({ limits: { fileSize: 20 * 1024 * 1024 } });
+    if (!part) throw badRequest('Choose an Excel file');
+    const buffer = await part.toBuffer();
+    const result = await importWorkbook(svc.db, buffer, me, q.dryRun);
+    if (!q.dryRun && !result.errors.length) {
+      req.log.info(`Excel import by ${me.name}: ${result.created.considerations.length} considerations, ${result.created.iterations.length} iterations, ${result.created.flags.length} flags`);
+      svc.bus.emit('activity', { by: me.id, items: [] });
+    }
+    return result;
   });
 }

@@ -14,8 +14,9 @@ import { registerAuth } from './auth.js';
 import { registerRecordRoutes } from './routes/records.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerSocialRoutes } from './routes/social.js';
-import { registerExportRoutes } from './routes/export.js';
-import { registerAlertRoutes } from './routes/alerts.js';
+import { registerExportRoutes, registerImportRoutes } from './routes/export.js';
+import { registerAlertRoutes, registerMaintenanceRoutes } from './routes/alerts.js';
+import { registerInsightRoutes } from './routes/insights.js';
 import { startTeams } from './teams.js';
 
 export interface BuildOptions {
@@ -52,7 +53,10 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
   registerAdminRoutes(app, svc);
   registerSocialRoutes(app, svc);
   registerExportRoutes(app, svc);
+  registerImportRoutes(app, svc);
   registerAlertRoutes(app, svc);
+  registerMaintenanceRoutes(app, svc);
+  registerInsightRoutes(app, svc);
   startTeams(svc, (m) => app.log.warn(m));
 
   // The built front end (dist/client). Files are looked up on every request,
