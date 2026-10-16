@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { api, signOut } from '../api';
 import { useMe } from '../hooks';
 import { ErrorBox, Field } from '../components/ui';
@@ -80,7 +79,6 @@ export function SetupPage({ managerName }: { managerName: string }) {
 
 export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const { data: me } = useMe();
   const [current, setCurrent] = useState('');
   const [password, setPassword] = useState('');
@@ -94,8 +92,8 @@ export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
     try {
       await api.post('/api/auth/password', { currentPassword: forced ? undefined : current, newPassword: password });
       setDone(true);
+      // Stay on the page the person was opening (e.g. a link from Teams or an email).
       await qc.invalidateQueries({ queryKey: ['me'] });
-      if (forced) navigate('/');
     } catch (err) {
       setError(err);
     }
